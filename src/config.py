@@ -10,3 +10,8 @@ redis_client = Redis(
     password=os.getenv("REDIS_PASSWORD", None),
     decode_responses=True,
 )
+
+# Building configuration
+NUM_FLOORS = 10
+NUM_ELEVATORS = 3
+

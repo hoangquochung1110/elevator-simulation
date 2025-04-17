@@ -67,3 +67,6 @@ ehthumbs.db
 Thumbs.db
 
 .windsurfrules
+
+.bruno/
+bruno.json
