@@ -2,7 +2,7 @@ import json
 import sys
 import asyncio
 
-from .config import redis_client
+from .config import redis_client, NUM_FLOORS, NUM_ELEVATORS
 from .channels import (
     ELEVATOR_REQUESTS,
     ELEVATOR_COMMANDS,
@@ -36,8 +36,8 @@ if __name__ == "__main__":
     else:
         channels = [
             ELEVATOR_REQUESTS,
-            ELEVATOR_COMMANDS,
-            ELEVATOR_STATUS,
-            ELEVATOR_SYSTEM,
+            ELEVATOR_SYSTEM,  
         ]
+        channels.extend([ELEVATOR_COMMANDS.format(i) for i in range(1, NUM_ELEVATORS+1)])
+        channels.extend([ELEVATOR_STATUS.format(i) for i in range(1, NUM_ELEVATORS+1)])
     asyncio.run(subscribe(*channels))
