@@ -1,14 +1,12 @@
-import asyncio
 import json
 import logging
+from logging import Formatter, StreamHandler
 from typing import Dict, Optional
 
 from ..channels import ELEVATOR_COMMANDS, ELEVATOR_REQUESTS, ELEVATOR_STATUS
 from ..config import NUM_ELEVATORS, redis_client
 from ..models.elevator import Elevator, ElevatorStatus
-from ..models.request import Direction, ExternalRequest
-
-logger = logging.getLogger(__name__)
+from ..models.request import Direction, ExternalRequest, InternalRequest
 
 
 class Scheduler:
@@ -23,6 +21,11 @@ class Scheduler:
         self.redis_client = redis_client
         self.pubsub = self.redis_client.pubsub()
         self.elevator_states: Dict[int, Elevator] = {}
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        handler = StreamHandler()
+        handler.setFormatter(Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        self.logger.addHandler(handler)
 
     async def start(self):
         # subscribe to the elevator requests channel
@@ -35,6 +38,12 @@ class Scheduler:
             await self._handle_message(msg)
 
     async def _handle_message(self, message: str):
+        """
+        Handle an incoming message from Redis.
+
+        Args:
+            message: The Redis pub/sub message
+        """
         # Skip subscribe/unsubscribe messages
         if message["type"] != "message":
             return
@@ -47,9 +56,13 @@ class Scheduler:
             return
 
         request_type = data.get("request_type")
+        self.logger.info(f"Received {request_type} request: {data}")
         if request_type == "external":
             request = ExternalRequest.from_dict(data)
             await self._handle_external_request(request)
+        elif request_type == "internal":
+            request = InternalRequest.from_dict(data)
+            await self._handle_internal_request(request)
 
     async def _handle_external_request(self, request):
         # Decide which elevator should handle this request
@@ -62,9 +75,21 @@ class Scheduler:
             }
             # publish command to a channel
             await self.redis_client.publish(ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command))
-            logger.info(f"Assigned external request from floor {request.floor} to elevator {elevator_id}")
+            self.logger.info(f"Assigned external request from floor {request.floor} to elevator {elevator_id}")
         else:
-            logger.warning(f"Could not find suitable elevator for request from floor {request.floor}")
+            self,logger.warning(f"Could not find suitable elevator for request from floor {request.floor}")
+
+    async def _handle_internal_request(self, request):
+        # prepare add_destination command
+        command = {
+            "command": "add_destination",
+            "floor": request.destination_floor,
+            "request_id": request.id
+        }
+        # publish command to a channel
+        await self.redis_client.publish(ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command))
+        self.logger.info(f"Assigned internal request from elevator {request.elevator_id} to floor {request.destination_floor}")
+
 
     async def _load_elevator_states(self) -> None:
         for elevator_id in range(1, NUM_ELEVATORS + 1):
@@ -90,11 +115,12 @@ class Scheduler:
         """
         best_elevator_id = None
         best_score = float('inf')  # Lower is better
-        
+        self.logger.info(f"Serving request from floor {request.floor} in direction {request.direction}")        
         # Calculate a score for each elevator (distance-based)
         for elevator_id, state in self.elevator_states.items():
-            score = self._calculate_score(state, request.floor, request.direction)
-            
+            score = await self._calculate_score(state, request.floor, request.direction)
+
+            self.logger.info(f"Elevator {elevator_id} score: {score}")
             # Keep track of best elevator
             if score < best_score:
                 best_score = score
@@ -102,7 +128,7 @@ class Scheduler:
         
         return best_elevator_id
 
-    def _calculate_score(self, elevator_state: Elevator, request_floor: int, request_direction: Direction) -> float:
+    async def _calculate_score(self, elevator_state: Elevator, request_floor: int, request_direction: Direction) -> float:
         """
         Calculate a score indicating suitability of an elevator for a request.
         
@@ -114,9 +140,10 @@ class Scheduler:
             request_direction: The direction of the request
             
         Returns:
-            A score indicating the suitability of the elevator for the request
+            A score indicating the suitability of the elevator for the request. Lower is better.
         """
         # Lower score is better.
+        await self._load_elevator_states()
         current_floor = elevator_state.current_floor
         status = elevator_state.status
 

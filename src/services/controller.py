@@ -100,7 +100,8 @@ class ElevatorController:
             command = data.get("command")
             if command == "go_to_floor":
                 await self.go_to_floor(data.get("floor"))
-            print(command)
+            if command == "add_destination":
+                await self.add_destination(data.get("floor"))
 
         except json.JSONDecodeError:
             self.logger.error(f"Invalid JSON in command: {message['data']}")

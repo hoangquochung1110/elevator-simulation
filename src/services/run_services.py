@@ -6,8 +6,15 @@ from src.services.controller import ElevatorController
 
 async def main():
     sched = Scheduler()
-    controller = ElevatorController(elevator_id=1)
-    await asyncio.gather(sched.start(), controller.start())
+    controller_1 = ElevatorController(elevator_id=1)
+    controller_2 = ElevatorController(elevator_id=2)
+    controller_3 = ElevatorController(elevator_id=3)
+    await asyncio.gather(
+        sched.start(),
+        controller_1.start(),
+        controller_2.start(),
+        controller_3.start(),
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())

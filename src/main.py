@@ -99,7 +99,14 @@ async def fetch_elevator_statuses() -> List[dict]:
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
     # serialize Pydantic model to JSON string
-    payload = req.model_dump_json()
+    request_data = req.model_dump()
+    request_data.update({
+        "timestamp": datetime.utcnow().isoformat(),
+        "id": str(uuid.uuid4()),
+        "request_type": "internal",
+        "status": "pending",
+    })
+    payload = json.dumps(request_data)
     await redis_client.publish(ELEVATOR_REQUESTS, payload)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
