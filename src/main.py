@@ -3,7 +3,7 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
+from typing import Any, List
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -79,6 +79,23 @@ class InternalRequestModel(BaseModel):
     )
 
 
+async def fetch_elevator_statuses() -> List[dict]:
+    statuses = []
+    for i in range(1, NUM_ELEVATORS + 1):
+        key = ELEVATOR_STATUS.format(i)
+        raw = await redis_client.get(key)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        eid = int(key.split(":")[-1])
+        statuses.append((eid, data))
+    statuses.sort(key=lambda x: x[0])
+    return [data for _, data in statuses]
+
+
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
     # serialize Pydantic model to JSON string
@@ -105,30 +122,12 @@ async def create_external_request(req: ExternalRequestModel):
 
 @app.get("/api/elevators", status_code=200)
 async def get_elevators():
-    # dynamically fetch all elevator status keys
-    statuses = []
-    for i in range(1, NUM_ELEVATORS + 1):
-        key = ELEVATOR_STATUS.format(i)
-        raw = await redis_client.get(key)
-        if not raw:
-            continue
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        # extract elevator id from key
-        eid = int(key.split(":")[-1])
-        statuses.append((eid, data))
-    # sort by elevator id
-    statuses.sort(key=lambda x: x[0])
-    elevators = [data for _, data in statuses]
-    return {"elevators": elevators}
+    return {"elevators": await fetch_elevator_statuses()}
 
 
 @app.get("/elevator-table", response_class=HTMLResponse)
 async def elevator_table(request: Request):
-    result = await get_elevators()
-    elevators = result["elevators"]
+    elevators = await fetch_elevator_statuses()
     return templates.TemplateResponse("elevator_table.html", {"request": request, "elevators": elevators})
 
 
