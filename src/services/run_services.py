@@ -1,3 +1,4 @@
+# python -m src.services.run_services
 import asyncio
 from src.services.scheduler import Scheduler
 from src.services.controller import ElevatorController
