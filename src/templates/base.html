@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Elevator Simulator{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- HTMX for interactive UI without much JS -->
+    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <!-- Add Alpine.js for minimal JS interactivity where needed -->
+    <script defer src="https://unpkg.com/alpinejs@3.12.0/dist/cdn.min.js"></script>
+    <script>
+        // Add WebSocket connection logging
+        htmx.on("htmx:wsOpen", function(evt) {
+            console.log("WebSocket connected successfully", evt);
+        });
+        htmx.on("htmx:wsError", function(evt) {
+            console.error("WebSocket error", evt);
+        });
+        htmx.on("htmx:wsClose", function(evt) {
+            console.warn("WebSocket closed", evt);
+        });
+        htmx.on("htmx:wsAfterMessage", function(evt) {
+            console.log("WebSocket message received", evt);
+        });
+        
+        // Log all HTMX requests
+        htmx.logger = function(elt, event, data) {
+            if(console) {
+                console.log("HTMX Event:", event, "Data:", data);
+            }
+        }
+        htmx.logAll();
+    </script>
+</head>
+<body>
+    <header>
+        <h1>Redis-Powered Elevator Simulator</h1>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <p>Elevator Simulator with HTMX and Server-Side Rendering</p>
+    </footer>
+</body>
+</html>

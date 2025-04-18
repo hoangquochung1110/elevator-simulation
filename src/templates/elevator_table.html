@@ -1,0 +1,27 @@
+<div id="elevator-table"
+     hx-get="/elevator-table"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Current Floor</th>
+                <th>Status</th>
+                <th>Door</th>
+                <th>Destinations</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for elevator in elevators %}
+            <tr>
+                <td>{{ elevator.id }}</td>
+                <td>{{ elevator.current_floor }}</td>
+                <td>{{ elevator.status }}</td>
+                <td>{{ elevator.door_status }}</td>
+                <td>{{ elevator.destinations | join(", ") }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

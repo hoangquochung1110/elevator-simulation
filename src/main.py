@@ -5,7 +5,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS, ELEVATOR_STATUS,
@@ -30,6 +33,8 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Redis Pub/Sub API", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
+templates = Jinja2Templates(directory="src/templates")
 
 
 class PublishRequest(BaseModel):
@@ -74,7 +79,7 @@ class InternalRequestModel(BaseModel):
     )
 
 
-@app.post("/requests/internal", status_code=202)
+@app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
     # serialize Pydantic model to JSON string
     payload = req.model_dump_json()
@@ -82,7 +87,7 @@ async def create_internal_request(req: InternalRequestModel):
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
 
-@app.post("/requests/external", status_code=202)
+@app.post("/api/requests/external", status_code=202)
 async def create_external_request(req: ExternalRequestModel):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -98,7 +103,7 @@ async def create_external_request(req: ExternalRequestModel):
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
 
-@app.get("/elevators", status_code=200)
+@app.get("/api/elevators", status_code=200)
 async def get_elevators():
     # dynamically fetch all elevator status keys
     statuses = []
@@ -118,3 +123,17 @@ async def get_elevators():
     statuses.sort(key=lambda x: x[0])
     elevators = [data for _, data in statuses]
     return {"elevators": elevators}
+
+
+@app.get("/elevator-table", response_class=HTMLResponse)
+async def elevator_table(request: Request):
+    result = await get_elevators()
+    elevators = result["elevators"]
+    return templates.TemplateResponse("elevator_table.html", {"request": request, "elevators": elevators})
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    result = await get_elevators()
+    elevators = result["elevators"]
+    return templates.TemplateResponse("index.html", {"request": request, "elevators": elevators})
