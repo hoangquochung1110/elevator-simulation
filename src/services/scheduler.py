@@ -24,7 +24,9 @@ class Scheduler:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         handler = StreamHandler()
-        handler.setFormatter(Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        handler.setFormatter(
+            Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
         self.logger.addHandler(handler)
 
     async def start(self):
@@ -47,12 +49,12 @@ class Scheduler:
         # Skip subscribe/unsubscribe messages
         if message["type"] != "message":
             return
-        
+
         # Deserialize the message
         try:
             data = json.loads(message["data"])
         except json.JSONDecodeError:
-            print(f"Invalid JSON: {message["data"]}")
+            print(f"Invalid JSON: {message['data']}")
             return
 
         request_type = data.get("request_type")
@@ -71,25 +73,37 @@ class Scheduler:
             command = {
                 "command": "go_to_floor",
                 "floor": request.floor,
-                "request_id": request.id
+                "request_id": request.id,
             }
             # publish command to a channel
-            await self.redis_client.publish(ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command))
-            self.logger.info(f"Assigned external request from floor {request.floor} to elevator {elevator_id}")
+            await self.redis_client.publish(
+                ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command)
+            )
+            self.logger.info(
+                f"Assigned external request from floor {request.floor} to elevator {elevator_id}"
+            )
         else:
-            self,logger.warning(f"Could not find suitable elevator for request from floor {request.floor}")
+            (
+                self,
+                logger.warning(
+                    f"Could not find suitable elevator for request from floor {request.floor}"
+                ),
+            )
 
     async def _handle_internal_request(self, request):
         # prepare add_destination command
         command = {
             "command": "add_destination",
             "floor": request.destination_floor,
-            "request_id": request.id
+            "request_id": request.id,
         }
         # publish command to a channel
-        await self.redis_client.publish(ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command))
-        self.logger.info(f"Assigned internal request from elevator {request.elevator_id} to floor {request.destination_floor}")
-
+        await self.redis_client.publish(
+            ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)
+        )
+        self.logger.info(
+            f"Assigned internal request from elevator {request.elevator_id} to floor {request.destination_floor}"
+        )
 
     async def _load_elevator_states(self) -> None:
         for elevator_id in range(1, NUM_ELEVATORS + 1):
@@ -97,25 +111,31 @@ class Scheduler:
             state = await redis_client.get(key)
             if state:
                 # Convert to proper types
-                self.elevator_states[elevator_id] = Elevator.from_dict(json.loads(state))
+                self.elevator_states[elevator_id] = Elevator.from_dict(
+                    json.loads(state)
+                )
             else:
                 raise ValueError(f"Elevator {elevator_id} not found")
 
-    async def _select_best_elevator_for_external(self, request: ExternalRequest) -> Optional[int]:
+    async def _select_best_elevator_for_external(
+        self, request: ExternalRequest
+    ) -> Optional[int]:
         """
         Select the best elevator to handle an external request.
-        
+
         This implements a simple "nearest available elevator" algorithm.
-        
+
         Args:
             request: The external request to assign
-            
+
         Returns:
             ID of the selected elevator, or None if no suitable elevator found
         """
         best_elevator_id = None
-        best_score = float('inf')  # Lower is better
-        self.logger.info(f"Serving request from floor {request.floor} in direction {request.direction}")        
+        best_score = float("inf")  # Lower is better
+        self.logger.info(
+            f"Serving request from floor {request.floor} in direction {request.direction}"
+        )
         # Calculate a score for each elevator (distance-based)
         for elevator_id, state in self.elevator_states.items():
             score = await self._calculate_score(state, request.floor, request.direction)
@@ -125,20 +145,22 @@ class Scheduler:
             if score < best_score:
                 best_score = score
                 best_elevator_id = elevator_id
-        
+
         return best_elevator_id
 
-    async def _calculate_score(self, elevator_state: Elevator, request_floor: int, request_direction: Direction) -> float:
+    async def _calculate_score(
+        self, elevator_state: Elevator, request_floor: int, request_direction: Direction
+    ) -> float:
         """
         Calculate a score indicating suitability of an elevator for a request.
-        
+
         This implements a simple scoring system based on distance and status.
-        
+
         Args:
             elevator_state: The state of the elevator to score
             request_floor: The floor of the request
             request_direction: The direction of the request
-            
+
         Returns:
             A score indicating the suitability of the elevator for the request. Lower is better.
         """
@@ -156,14 +178,15 @@ class Scheduler:
         elif status in (ElevatorStatus.MOVING_UP, ElevatorStatus.MOVING_DOWN):
             # Check if elevator is moving toward the requested floor in the same direction
             is_on_way = (
-                (status == ElevatorStatus.MOVING_UP and 
-                request_direction == Direction.UP and 
-                request_floor >= current_floor) or
-                (status == ElevatorStatus.MOVING_DOWN and 
-                request_direction == Direction.DOWN and 
-                request_floor <= current_floor)
+                status == ElevatorStatus.MOVING_UP
+                and request_direction == Direction.UP
+                and request_floor >= current_floor
+            ) or (
+                status == ElevatorStatus.MOVING_DOWN
+                and request_direction == Direction.DOWN
+                and request_floor <= current_floor
             )
-            
+
             # Apply bonus or penalty based on whether elevator is on the way
             score *= 0.8 if is_on_way else 5.0
 

@@ -10,6 +10,7 @@ from .channels import (
     ELEVATOR_SYSTEM,
 )
 
+
 async def subscribe(*channels: list[str]):
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(*channels)
@@ -36,8 +37,12 @@ if __name__ == "__main__":
     else:
         channels = [
             ELEVATOR_REQUESTS,
-            ELEVATOR_SYSTEM,  
+            ELEVATOR_SYSTEM,
         ]
-        channels.extend([ELEVATOR_COMMANDS.format(i) for i in range(1, NUM_ELEVATORS+1)])
-        channels.extend([ELEVATOR_STATUS.format(i) for i in range(1, NUM_ELEVATORS+1)])
+        channels.extend(
+            [ELEVATOR_COMMANDS.format(i) for i in range(1, NUM_ELEVATORS + 1)]
+        )
+        channels.extend(
+            [ELEVATOR_STATUS.format(i) for i in range(1, NUM_ELEVATORS + 1)]
+        )
     asyncio.run(subscribe(*channels))

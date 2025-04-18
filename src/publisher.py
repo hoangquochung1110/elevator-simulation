@@ -9,6 +9,7 @@ from .channels import (
     ELEVATOR_SYSTEM,
 )
 
+
 async def publish(channel: str, message):
     payload = message if isinstance(message, str) else json.dumps(message)
     await redis_client.publish(channel, payload)

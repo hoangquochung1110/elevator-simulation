@@ -12,7 +12,7 @@ ELEVATOR_REQUESTS = "elevator:requests"
 ELEVATOR_COMMANDS = "elevator:commands:{}"
 
 # Channel for receiving status updates from a specific elevator (format with elevator ID)
-# Example usage: ELEVATOR_STATUS.format(2) -> "elevator:status:2" 
+# Example usage: ELEVATOR_STATUS.format(2) -> "elevator:status:2"
 ELEVATOR_STATUS = "elevator:status:{}"
 
 # Channel for system-wide notifications and events

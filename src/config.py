@@ -14,4 +14,3 @@ redis_client = Redis(
 # Building configuration
 NUM_FLOORS = 10
 NUM_ELEVATORS = 3
-
