@@ -1,0 +1,22 @@
+/* Animate door opening/closing */
+.door-cell {
+  transition: background-color 0.5s ease;
+}
+.door-cell.open {
+  background-color: #e0f7fa; /* light cyan for open */
+}
+.door-cell.closed {
+  background-color: #fff3e0; /* light orange for closed */
+}
+.door-status {
+  display: inline-block;
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+.door-cell.open .door-status {
+  transform: scale(1.2);
+  color: #00796b; /* teal for open */
+}
+.door-cell.closed .door-status {
+  transform: scale(1);
+  color: #bf360c; /* deep orange for closed */
+}

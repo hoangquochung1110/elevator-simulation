@@ -17,8 +17,17 @@
             <tr>
                 <td>{{ elevator.id }}</td>
                 <td>{{ elevator.current_floor }}</td>
-                <td>{{ elevator.status }}</td>
-                <td>{{ elevator.door_status }}</td>
+                <td>
+                  {% if elevator.status == 'idle' %}🟢 Idle
+                  {% elif elevator.status == 'moving_up' %}🔼 Moving Up
+                  {% elif elevator.status == 'moving_down' %}🔽 Moving Down
+                  {% endif %}
+                </td>
+                <td class="door-cell {% if elevator.door_status=='open' %}open{% else %}closed{% endif %}">
+                  <span class="door-status">
+                    {% if elevator.door_status=='open' %}🚪 Open{% else %}🚪 Closed{% endif %}
+                  </span>
+                </td>
                 <td>{{ elevator.destinations | join(", ") }}</td>
             </tr>
         {% endfor %}
