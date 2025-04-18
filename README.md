@@ -9,49 +9,57 @@ This project simulates a multi-elevator system with a web-based dashboard.
   - Scheduler assigns via `elevator:commands:{id}` channels
   - Controllers broadcast state on `elevator:status:{id}`
 
-## Getting Started
+## Core Components
+- UI Dashboard
+- FastAPI endpoints
+- Redis Pub/Sub
+- Scheduler
+- Controllers
 
-### Prerequisites
+## Data Flow Patterns
 
-- Redis server (>= 5.x)
+### 1. Floor Call Request Flow
 
-### Running Services
+When a passenger presses a call button on a floor:
 
-1. Start Redis:
-   ```sh
-   docker compose up -d
-   ```
-2. Start the FastAPI web app:
-   ```sh
-   uvicorn src.main:app --reload
-   ```
-3. Start the scheduler and controllers:
-   ```sh
-   python -m src.services.run_services
-   ```
-4. (Optional) Start the log subscriber:
-   ```sh
-   python src/subscriber.py
-   ```
+1. API publishes request to `elevator:requests`
+2. Scheduler receives message via subscription
+3. Scheduler queries all elevator states from Redis hashes
+4. Scheduler applies optimization algorithm to determine best elevator
+5. Scheduler publishes command to `elevator:commands:{chosen_id}`
+6. Selected Elevator Controller receives command via subscription
+7. Controller adds floor to its destination sorted set
+8. Controller begins movement and publishes status updates
+9. Controller updates its state hash for persistence (optional)
 
-### Accessing the Dashboard
+### 2. Elevator Movement Sequence
 
-Open your browser at http://localhost:8000/
+As an elevator moves between floors:
 
-### Using the REST API
+1. Controller updates internal state (position, direction)
+2. Controller publishes status update to `elevator:status:{id}`
+3. Controller updates its hash at `elevator:{id}:state` 
+4. WebSocket server receives status update and forwards to UI
+5. UI reflects elevator movement in real-time
 
-- **External request** (floor call):
-  ```sh
-  curl -X POST http://localhost:8000/api/requests/external \
-       -H "Content-Type: application/json" \
-       -d '{"floor": 3, "direction": "up"}'
-  ```
-- **Internal request** (destination button):
-  ```sh
-  curl -X POST http://localhost:8000/api/requests/internal \
-       -H "Content-Type: application/json" \
-       -d '{"elevator_id": 1, "destination_floor": 5}'
-  ```
+### 3. Multi-Elevator Coordination
+
+When multiple elevators are operating simultaneously:
+
+1. Each Controller operates independently, subscribing only to its command channel
+2. The Scheduler maintains system-wide awareness by reading all elevator states
+3. Status updates flow through separate channels, preventing message congestion
+4. The Scheduler optimizes assignments based on current positions and movements of all elevators
+
+## Redis Data Structures Used
+
+### 1. Pub/Sub Channels
+
+Used for real-time communication between components:
+- `elevator:requests` - All passenger requests enter the system
+- `elevator:commands:{id}` - Individual command channel for each elevator
+- `elevator:status:{id}` - Status updates from each elevator
+- `elevator:system` - System-wide notifications and events (not in use for now)
 
 ## Limitations
 1. Simple FIFO stops
