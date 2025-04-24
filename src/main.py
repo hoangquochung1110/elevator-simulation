@@ -3,9 +3,10 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
-from fastapi import FastAPI, Request
+from typing import Any, List, Optional
+
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -149,6 +150,49 @@ async def create_external_request(req: ExternalRequestModel):
 @app.get("/api/elevators", status_code=200)
 async def get_elevators():
     return {"elevators": await fetch_elevator_statuses()}
+
+
+@app.get("/api/requests", status_code=200)
+async def get_stream_requests():
+    """Retrieve all entries from the elevator requests stream"""
+    entries = await redis_client.xrange(ELEVATOR_REQUESTS_STREAM, "-", "+")
+    requests = []
+    for msg_id, fields in entries:
+        # include message ID with each entry
+        entry = {"id": msg_id}
+        entry.update(fields)
+        requests.append(entry)
+    return {"requests": requests}
+
+
+@app.delete("/api/requests", status_code=200)
+async def trim_stream(
+    min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
+    maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
+    approximate: bool = Query(True, description="Whether to use approximate trimming"),
+):
+    """
+    Trim the elevator requests stream using XTRIM.
+    Only one of min_id or maxlen must be provided.
+    """
+    # Enforce exclusive parameters
+    if (min_id is None and maxlen is None) or (min_id is not None and maxlen is not None):
+        raise HTTPException(status_code=400, detail="Provide exactly one of min_id or maxlen")
+    # Trim by count
+    if maxlen is not None:
+        trimmed_count = await redis_client.xtrim(
+            ELEVATOR_REQUESTS_STREAM,
+            maxlen=maxlen,
+            approximate=approximate,
+        )
+    else:
+        # Trim by ID
+        trimmed_count = await redis_client.xtrim(
+            ELEVATOR_REQUESTS_STREAM,
+            minid=min_id,
+            approximate=approximate,
+        )
+    return {"trimmed": trimmed_count}
 
 
 @app.get("/elevator-table", response_class=HTMLResponse)
