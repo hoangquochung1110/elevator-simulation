@@ -17,3 +17,6 @@ ELEVATOR_STATUS = "elevator:status:{}"
 
 # Channel for system-wide notifications and events
 ELEVATOR_SYSTEM = "elevator:system"
+
+# Channel that alternative to ELEVATOR_REQUESTS, using Redis Stream
+ELEVATOR_REQUESTS_STREAM = "elevator:requests:stream"

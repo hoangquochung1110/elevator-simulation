@@ -12,6 +12,14 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .channels import ELEVATOR_REQUESTS, ELEVATOR_STATUS, ELEVATOR_SYSTEM
+
+from .channels import (
+    ELEVATOR_COMMANDS,
+    ELEVATOR_REQUESTS,
+    ELEVATOR_STATUS,
+    ELEVATOR_SYSTEM,
+    ELEVATOR_REQUESTS_STREAM,
+)
 from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
 
 
@@ -133,6 +141,8 @@ async def create_external_request(req: ExternalRequestModel):
     payload = json.dumps(request_data)
 
     await redis_client.publish(ELEVATOR_REQUESTS, payload)
+    # Streams should accept Python dict
+    await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
 
