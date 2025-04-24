@@ -74,10 +74,10 @@ class ExternalRequest(BaseRequest):
         direction: UP or DOWN direction
     """
 
-    def __init__(self, floor: int, direction: Direction):
+    def __init__(self, floor: int | str, direction: Direction):
         super().__init__()
-        self.floor = floor
-        self.direction = direction
+        self.floor = int(floor)
+        self.direction = Direction(direction)
 
     def to_dict(self) -> dict:
         """
