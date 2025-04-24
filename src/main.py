@@ -116,7 +116,7 @@ async def create_internal_request(req: InternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "id": str(uuid.uuid4()),
             "request_type": "internal",
             "status": "pending",
@@ -133,7 +133,7 @@ async def create_external_request(req: ExternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "id": str(uuid.uuid4()),
             "request_type": "external",
             "status": "pending",
