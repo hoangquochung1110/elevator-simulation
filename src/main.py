@@ -122,8 +122,7 @@ async def create_internal_request(req: InternalRequestModel):
             "status": "pending",
         }
     )
-    payload = json.dumps(request_data)
-    await redis_client.publish(ELEVATOR_REQUESTS, payload)
+    await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
 
@@ -139,9 +138,7 @@ async def create_external_request(req: ExternalRequestModel):
             "status": "pending",
         }
     )
-    payload = json.dumps(request_data)
 
-    await redis_client.publish(ELEVATOR_REQUESTS, payload)
     # Streams should accept Python dict
     await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}

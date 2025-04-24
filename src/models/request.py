@@ -135,8 +135,8 @@ class InternalRequest(BaseRequest):
 
     def __init__(self, elevator_id: int, destination_floor: int):
         super().__init__()
-        self.elevator_id = elevator_id
-        self.destination_floor = destination_floor
+        self.elevator_id = int(elevator_id)
+        self.destination_floor = int(destination_floor)
 
     def to_dict(self) -> dict:
         """

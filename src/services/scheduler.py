@@ -1,11 +1,16 @@
+import asyncio
 import json
 import structlog
 from typing import Dict, Optional
+from redis.exceptions import RedisError
 
-from ..channels import ELEVATOR_COMMANDS, ELEVATOR_REQUESTS, ELEVATOR_STATUS
+from ..channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS,
+                        ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS)
 from ..config import NUM_ELEVATORS, redis_client
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
+
+SCHEDULER_GROUP = "scheduler-group"
 
 
 class Scheduler:
@@ -16,73 +21,93 @@ class Scheduler:
     1. Listens for new requests on elevator:requests
     """
 
-    def __init__(self):
+    def __init__(self, id):
+        self.id = id
+        self.consumer_id = f"scheduler-{id}"
         self.redis_client = redis_client
-        self.pubsub = self.redis_client.pubsub()
         self.elevator_states: Dict[int, Elevator] = {}
         self.logger = structlog.get_logger(__name__)
+        self._running: bool = False
         # Logger handlers and level are configured centrally in application entry-point
 
-    async def start(self):
-        # subscribe to the elevator requests channel
-        await self.pubsub.subscribe(ELEVATOR_REQUESTS)
+    async def start(self) -> None:
+        self._running = True
+        # Ensure consumer group exists
+        try:
+            await self.redis_client.xgroup_create(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, mkstream=True)
+        except RedisError as e:
+            if "BUSYGROUP" not in str(e):
+                raise
 
         # Load initial elevator states
         await self._load_elevator_states()
 
-        async for msg in self.pubsub.listen():
-            await self._handle_message(msg)
+        # Claim and process any pending entries for this consumer
+        pending_stream_entries = await self.redis_client.xreadgroup(
+            groupname=SCHEDULER_GROUP,
+            consumername=self.consumer_id,
+            streams={ELEVATOR_REQUESTS_STREAM: "0"},
+            count=10,
+            block=0,
+        )
+        if pending_stream_entries:
+            for _, messages in pending_stream_entries:
+                for message in messages:
+                    await self._handle_message(message)
 
-    async def _handle_message(self, message: str):
+        # subscribe to the elevator requests channel
+        while self._running:
+            try:
+                # Block up to 1 second for new, unseen entries
+                stream_entries = await self.redis_client.xreadgroup(
+                    groupname=SCHEDULER_GROUP,
+                    consumername=self.consumer_id,
+                    streams={ELEVATOR_REQUESTS_STREAM: ">"},
+                    count=10,  # Process in smaller batches
+                    block=2000,
+                )
+                if not stream_entries:
+                    self.logger.debug("No new stream entries")
+                    continue
+                for stream, messages in stream_entries:
+                    for message in messages:
+                        await self._handle_message(message)
+            except Exception:
+                self.logger.error("Error in scheduler loop", exc_info=True)
+                await asyncio.sleep(1)
+
+    async def _handle_message(self, message) -> None:
         """
         Handle an incoming message from Redis.
 
         Args:
             message: The Redis pub/sub message
         """
-        # Skip subscribe/unsubscribe messages
-        if message["type"] != "message":
-            return
-
-        # Deserialize the message
+        msg_id, data = message
         try:
-            request_data = json.loads(message["data"])
-        except json.JSONDecodeError:
-            self.logger.error(
-                "invalid_json",
-                raw_message=message["data"],
-                exc_info=True,
-            )
-            return
-
-        request_type = request_data.get("request_type")
-        request_id = request_data.get("id")
-        try:
-            self.logger.info(
-                "received_request",
-                request_id=request_id,
-                request_type=request_type,
-                request_data=request_data,
-            )
+            # Message processing logic
+            request_type = data.get("request_type")
+            self.logger.info("Received %s request: %s", request_type, data)
             if request_type == "external":
-                request = ExternalRequest.from_dict(request_data)
+                request = ExternalRequest.from_dict(data)
                 await self._handle_external_request(request)
             elif request_type == "internal":
-                request = InternalRequest.from_dict(request_data)
+                request = InternalRequest.from_dict(data)
                 await self._handle_internal_request(request)
-        except Exception as e:
-            self.logger.error(
-                "error_handling_message",
-                error_message=str(e),
-                request_id=request_id,
-                raw_message=message["data"],
-                exc_info=True,
-            )
+
+            # TODO: "publisher" should implement request-reply pattern
+            # or side table for tracking processed messages
+            await self.redis_client.xack(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, msg_id)
+        except Exception:
+            self.logger.error("Error processing message %s", msg_id, exc_info=True)
 
     async def _handle_external_request(self, request):
         # Decide which elevator should handle this request
         elevator_id = await self._select_best_elevator_for_external(request)
         if elevator_id:
+            self.logger.info(
+                f"Handling external request from floor {request.floor} to elevator {elevator_id}"
+            )
             command = {
                 "correlation_id": request.id,
                 "command": "go_to_floor",
@@ -115,6 +140,9 @@ class Scheduler:
             "floor": request.destination_floor,
             "request_id": request.id,
         }
+        self.logger.info(
+            f"Handling external request from floor {request.destination_floor} to elevator {request.elevator_id}"
+        )
         # publish command to a channel
         await self.redis_client.publish(
             ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)
@@ -129,7 +157,7 @@ class Scheduler:
     async def _load_elevator_states(self) -> None:
         for elevator_id in range(1, NUM_ELEVATORS + 1):
             key = ELEVATOR_STATUS.format(elevator_id)
-            state = await redis_client.get(key)
+            state = await self.redis_client.get(key)
             if state:
                 # Convert to proper types
                 self.elevator_states[elevator_id] = Elevator.from_dict(
@@ -163,7 +191,6 @@ class Scheduler:
         # Calculate a score for each elevator (distance-based)
         for elevator_id, state in self.elevator_states.items():
             score = await self._calculate_score(state, request.floor, request.direction)
-
             self.logger.info(
                 "elevator_score",
                 request_id=request.id,
@@ -194,7 +221,6 @@ class Scheduler:
             A score indicating the suitability of the elevator for the request. Lower is better.
         """
         # Lower score is better.
-        await self._load_elevator_states()
         current_floor = elevator_state.current_floor
         status = elevator_state.status
 

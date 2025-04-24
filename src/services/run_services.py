@@ -2,18 +2,18 @@
 import asyncio
 from src.services.scheduler import Scheduler
 from src.services.controller import ElevatorController
+from src.config import NUM_ELEVATORS
 
 
 async def main():
-    sched = Scheduler()
-    controller_1 = ElevatorController(elevator_id=1)
-    controller_2 = ElevatorController(elevator_id=2)
-    controller_3 = ElevatorController(elevator_id=3)
+
+    sched = Scheduler(id=1)
+    # dynamically create controllers based on config
+    controllers = [ElevatorController(elevator_id=i+1) for i in range(NUM_ELEVATORS)]
+    # start scheduler and all controllers
     await asyncio.gather(
         sched.start(),
-        controller_1.start(),
-        controller_2.start(),
-        controller_3.start(),
+        *[c.start() for c in controllers],
     )
 
 
