@@ -180,6 +180,12 @@ class ElevatorController:
             return
 
         if floor == self.elevator.current_floor:
+            self.logger.warning(
+                "Just open and close door without actually address the request."
+            )
+            await self.open_door()
+            await asyncio.sleep(2)
+            await self.close_door()
             return
         # Update elevator model
         self.elevator.add_destination(floor)
