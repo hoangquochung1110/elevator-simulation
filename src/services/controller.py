@@ -14,7 +14,6 @@ from typing import List, Optional
 from ..channels import ELEVATOR_COMMANDS, ELEVATOR_STATUS
 from ..config import NUM_ELEVATORS, NUM_FLOORS, redis_client
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
-from logging import StreamHandler, Formatter
 
 
 class ElevatorController:
@@ -46,12 +45,7 @@ class ElevatorController:
         self._movement_task = None
         self.elevator_state = None
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        handler = StreamHandler()
-        handler.setFormatter(
-            Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        self.logger.addHandler(handler)
+        # Logger handlers and level are configured centrally in application entry-point
 
     async def start(self) -> None:
         """
@@ -100,6 +94,7 @@ class ElevatorController:
         try:
             data = json.loads(message["data"])
             command = data.get("command")
+            self.logger.info(f"Received command: {command}")
             if command == "go_to_floor":
                 await self.go_to_floor(data.get("floor"))
             if command == "add_destination":
@@ -123,8 +118,12 @@ class ElevatorController:
             raise ValueError
 
         if floor == self.elevator.current_floor:
+            self.logger.info("Already at this floor, just open the door")
             # Already at this floor, just open the door
             await self.open_door()
+            # Wait for passengers to enter/exit, then close door
+            await asyncio.sleep(2)
+            await self.close_door()
             return
 
         # Add as highest priority destination

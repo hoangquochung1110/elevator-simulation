@@ -1,6 +1,5 @@
 import json
 import logging
-from logging import Formatter, StreamHandler
 from typing import Dict, Optional
 
 from ..channels import ELEVATOR_COMMANDS, ELEVATOR_REQUESTS, ELEVATOR_STATUS
@@ -22,12 +21,7 @@ class Scheduler:
         self.pubsub = self.redis_client.pubsub()
         self.elevator_states: Dict[int, Elevator] = {}
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        handler = StreamHandler()
-        handler.setFormatter(
-            Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        self.logger.addHandler(handler)
+        # Logger handlers and level are configured centrally in application entry-point
 
     async def start(self):
         # subscribe to the elevator requests channel
@@ -83,11 +77,8 @@ class Scheduler:
                 f"Assigned external request from floor {request.floor} to elevator {elevator_id}"
             )
         else:
-            (
-                self,
-                logger.warning(
-                    f"Could not find suitable elevator for request from floor {request.floor}"
-                ),
+            self.logger.warning(
+                f"Could not find suitable elevator for request from floor {request.floor}"
             )
 
     async def _handle_internal_request(self, request):
