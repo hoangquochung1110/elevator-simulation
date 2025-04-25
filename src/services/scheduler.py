@@ -46,18 +46,24 @@ class Scheduler:
 
         # Deserialize the message
         try:
-            data = json.loads(message["data"])
+            request_data = json.loads(message["data"])
         except json.JSONDecodeError:
-            self.logger.error("invalid_json", raw=message["data"])
+            self.logger.error("invalid_json", raw_message=message["data"])
             return
 
-        request_type = data.get("request_type")
-        self.logger.info("received_request", request_type=request_type, data=data)
+        request_type = request_data.get("request_type")
+        correlation_id = request_data.get("id")
+        self.logger.info(
+            "received_request",
+            correlation_id=correlation_id,
+            request_type=request_type,
+            request_data=request_data,
+        )
         if request_type == "external":
-            request = ExternalRequest.from_dict(data)
+            request = ExternalRequest.from_dict(request_data)
             await self._handle_external_request(request)
         elif request_type == "internal":
-            request = InternalRequest.from_dict(data)
+            request = InternalRequest.from_dict(request_data)
             await self._handle_internal_request(request)
 
     async def _handle_external_request(self, request):
@@ -65,6 +71,7 @@ class Scheduler:
         elevator_id = await self._select_best_elevator_for_external(request)
         if elevator_id:
             command = {
+                "correlation_id": request.id,
                 "command": "go_to_floor",
                 "floor": request.floor,
                 "request_id": request.id,
@@ -75,6 +82,7 @@ class Scheduler:
             )
             self.logger.info(
                 "assigned_external_request",
+                correlation_id=request.id,
                 floor=request.floor,
                 elevator_id=elevator_id,
                 request_id=request.id,
@@ -82,12 +90,16 @@ class Scheduler:
         else:
             self.logger.warning(
                 "no_suitable_elevator",
+                correlation_id=request.id,
                 floor=request.floor,
+                request_id=request.id,
+                direction=request.direction.name,
             )
 
     async def _handle_internal_request(self, request):
         # prepare add_destination command
         command = {
+            "correlation_id": request.id,
             "command": "add_destination",
             "floor": request.destination_floor,
             "request_id": request.id,
@@ -133,6 +145,7 @@ class Scheduler:
         best_score = float("inf")  # Lower is better
         self.logger.info(
             "serving_request",
+            correlation_id=request.id,
             floor=request.floor,
             direction=request.direction.name,
         )
@@ -142,6 +155,7 @@ class Scheduler:
 
             self.logger.info(
                 "elevator_score",
+                correlation_id=request.id,
                 elevator_id=elevator_id,
                 score=score,
             )

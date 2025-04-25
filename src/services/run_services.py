@@ -5,10 +5,6 @@ from src.services.controller import ElevatorController
 
 
 async def main():
-    # initialize global logging using LOGGING_CONFIG
-    import logging, logging.config
-    from src.config import LOGGING_CONFIG
-    logging.config.dictConfig(LOGGING_CONFIG)
     sched = Scheduler()
     controller_1 = ElevatorController(elevator_id=1)
     controller_2 = ElevatorController(elevator_id=2)

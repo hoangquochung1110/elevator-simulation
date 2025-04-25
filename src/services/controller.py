@@ -92,17 +92,22 @@ class ElevatorController:
 
         try:
             data = json.loads(message["data"])
+            correlation_id = data.get("correlation_id")
             command = data.get("command")
-            self.logger.info("received_command", command=command)
+            self.logger.info(
+                "received_command",
+                correlation_id=correlation_id,
+                command=command,
+            )
             if command == "go_to_floor":
                 await self.go_to_floor(data.get("floor"))
             if command == "add_destination":
                 await self.add_destination(data.get("floor"))
 
         except json.JSONDecodeError:
-            self.logger.error("invalid_json", raw=message["data"])
+            self.logger.error("invalid_json", raw_message=message["data"])
         except Exception as e:
-            self.logger.error("error_handling_command", error=str(e))
+            self.logger.error("error_handling_command", error_message=str(e))
 
     async def go_to_floor(self, floor: int):
         """
