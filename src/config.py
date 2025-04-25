@@ -17,7 +17,11 @@ def configure_logging():
 
     Call this once at startup so all modules use the same logging configuration.
     """
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        format="%(message)s",
+        level=getattr(logging, log_level, logging.INFO),
+    )
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
@@ -61,13 +65,15 @@ LOGGING_CONFIG = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'INFO',
             'formatter': 'standard',
             'stream': 'ext://sys.stdout',
         },
     },
     'root': {
-        'level': 'INFO',
         'handlers': ['console'],
     },
 }
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOGGING_CONFIG['handlers']['console']['level'] = LOG_LEVEL
+LOGGING_CONFIG['root']['level'] = LOG_LEVEL
