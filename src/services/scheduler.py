@@ -48,23 +48,36 @@ class Scheduler:
         try:
             request_data = json.loads(message["data"])
         except json.JSONDecodeError:
-            self.logger.error("invalid_json", raw_message=message["data"])
+            self.logger.error(
+                "invalid_json",
+                raw_message=message["data"],
+                exc_info=True,
+            )
             return
 
         request_type = request_data.get("request_type")
         correlation_id = request_data.get("id")
-        self.logger.info(
-            "received_request",
-            correlation_id=correlation_id,
-            request_type=request_type,
-            request_data=request_data,
-        )
-        if request_type == "external":
-            request = ExternalRequest.from_dict(request_data)
-            await self._handle_external_request(request)
-        elif request_type == "internal":
-            request = InternalRequest.from_dict(request_data)
-            await self._handle_internal_request(request)
+        try:
+            self.logger.info(
+                "received_request",
+                correlation_id=correlation_id,
+                request_type=request_type,
+                request_data=request_data,
+            )
+            if request_type == "external":
+                request = ExternalRequest.from_dict(request_data)
+                await self._handle_external_request(request)
+            elif request_type == "internal":
+                request = InternalRequest.from_dict(request_data)
+                await self._handle_internal_request(request)
+        except Exception as e:
+            self.logger.error(
+                "error_handling_message",
+                error_message=str(e),
+                correlation_id=correlation_id,
+                raw_message=message["data"],
+                exc_info=True,
+            )
 
     async def _handle_external_request(self, request):
         # Decide which elevator should handle this request

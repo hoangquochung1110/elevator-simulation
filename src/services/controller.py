@@ -105,9 +105,19 @@ class ElevatorController:
                 await self.add_destination(data.get("floor"))
 
         except json.JSONDecodeError:
-            self.logger.error("invalid_json", raw_message=message["data"])
+            self.logger.error(
+                "invalid_json",
+                raw_message=message["data"],
+                exc_info=True,
+            )
         except Exception as e:
-            self.logger.error("error_handling_command", error_message=str(e))
+            self.logger.error(
+                "error_handling_command",
+                error_message=str(e),
+                correlation_id=correlation_id,
+                raw_message=message["data"],
+                exc_info=True,
+            )
 
     async def go_to_floor(self, floor: int):
         """
