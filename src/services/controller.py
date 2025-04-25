@@ -92,11 +92,10 @@ class ElevatorController:
 
         try:
             data = json.loads(message["data"])
-            correlation_id = data.get("correlation_id")
             command = data.get("command")
             self.logger.info(
                 "received_command",
-                correlation_id=correlation_id,
+                elevator_id=self.elevator.id,
                 command=command,
             )
             if command == "go_to_floor":
@@ -107,6 +106,7 @@ class ElevatorController:
         except json.JSONDecodeError:
             self.logger.error(
                 "invalid_json",
+                elevator_id=self.elevator.id,
                 raw_message=message["data"],
                 exc_info=True,
             )
@@ -114,7 +114,7 @@ class ElevatorController:
             self.logger.error(
                 "error_handling_command",
                 error_message=str(e),
-                correlation_id=correlation_id,
+                elevator_id=self.elevator.id,
                 raw_message=message["data"],
                 exc_info=True,
             )
@@ -297,7 +297,14 @@ class ElevatorController:
             self.logger.info(f"Elevator {self.elevator.id} movement task cancelled")
             raise
         except Exception as e:
-            self.logger.error(f"Error in elevator movement: {e}")
+            self.logger.error(
+                "error_in_elevator_movement",
+                error_message=str(e),
+                elevator_id=self.elevator.id,
+                current_floor=self.elevator.current_floor,
+                remaining_destinations=list(self.elevator.destinations),
+                exc_info=True,
+            )
         finally:
             # Reset movement task
             self._movement_task = None

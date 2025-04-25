@@ -56,11 +56,11 @@ class Scheduler:
             return
 
         request_type = request_data.get("request_type")
-        correlation_id = request_data.get("id")
+        request_id = request_data.get("id")
         try:
             self.logger.info(
                 "received_request",
-                correlation_id=correlation_id,
+                request_id=request_id,
                 request_type=request_type,
                 request_data=request_data,
             )
@@ -74,7 +74,7 @@ class Scheduler:
             self.logger.error(
                 "error_handling_message",
                 error_message=str(e),
-                correlation_id=correlation_id,
+                request_id=request_id,
                 raw_message=message["data"],
                 exc_info=True,
             )
@@ -95,7 +95,6 @@ class Scheduler:
             )
             self.logger.info(
                 "assigned_external_request",
-                correlation_id=request.id,
                 floor=request.floor,
                 elevator_id=elevator_id,
                 request_id=request.id,
@@ -103,7 +102,6 @@ class Scheduler:
         else:
             self.logger.warning(
                 "no_suitable_elevator",
-                correlation_id=request.id,
                 floor=request.floor,
                 request_id=request.id,
                 direction=request.direction.name,
@@ -158,7 +156,7 @@ class Scheduler:
         best_score = float("inf")  # Lower is better
         self.logger.info(
             "serving_request",
-            correlation_id=request.id,
+            request_id=request.id,
             floor=request.floor,
             direction=request.direction.name,
         )
@@ -168,7 +166,7 @@ class Scheduler:
 
             self.logger.info(
                 "elevator_score",
-                correlation_id=request.id,
+                request_id=request.id,
                 elevator_id=elevator_id,
                 score=score,
             )
