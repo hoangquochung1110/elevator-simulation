@@ -180,8 +180,10 @@ class ElevatorController:
             return
 
         if floor == self.elevator.current_floor:
-            self.logger.warning(
-                "Just open and close door without actually address the request."
+            self.logger.info(
+                "Already at floor %s Just open and close door "
+                "without actually address the request.",
+                self.elevator.current_floor,
             )
             await self.open_door()
             await asyncio.sleep(2)
