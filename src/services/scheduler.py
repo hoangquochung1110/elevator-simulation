@@ -1,5 +1,5 @@
 import json
-import logging
+import structlog
 from typing import Dict, Optional
 
 from ..channels import ELEVATOR_COMMANDS, ELEVATOR_REQUESTS, ELEVATOR_STATUS
@@ -20,7 +20,7 @@ class Scheduler:
         self.redis_client = redis_client
         self.pubsub = self.redis_client.pubsub()
         self.elevator_states: Dict[int, Elevator] = {}
-        self.logger = logging.getLogger(__name__)
+        self.logger = structlog.get_logger(__name__)
         # Logger handlers and level are configured centrally in application entry-point
 
     async def start(self):
@@ -48,11 +48,11 @@ class Scheduler:
         try:
             data = json.loads(message["data"])
         except json.JSONDecodeError:
-            print(f"Invalid JSON: {message['data']}")
+            self.logger.error("invalid_json", raw=message["data"])
             return
 
         request_type = data.get("request_type")
-        self.logger.info(f"Received {request_type} request: {data}")
+        self.logger.info("received_request", request_type=request_type, data=data)
         if request_type == "external":
             request = ExternalRequest.from_dict(data)
             await self._handle_external_request(request)
@@ -74,11 +74,15 @@ class Scheduler:
                 ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command)
             )
             self.logger.info(
-                f"Assigned external request from floor {request.floor} to elevator {elevator_id}"
+                "assigned_external_request",
+                floor=request.floor,
+                elevator_id=elevator_id,
+                request_id=request.id,
             )
         else:
             self.logger.warning(
-                f"Could not find suitable elevator for request from floor {request.floor}"
+                "no_suitable_elevator",
+                floor=request.floor,
             )
 
     async def _handle_internal_request(self, request):
@@ -93,7 +97,10 @@ class Scheduler:
             ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)
         )
         self.logger.info(
-            f"Assigned internal request from elevator {request.elevator_id} to floor {request.destination_floor}"
+            "assigned_internal_request",
+            elevator_id=request.elevator_id,
+            floor=request.destination_floor,
+            request_id=request.id,
         )
 
     async def _load_elevator_states(self) -> None:
@@ -125,13 +132,19 @@ class Scheduler:
         best_elevator_id = None
         best_score = float("inf")  # Lower is better
         self.logger.info(
-            f"Serving request from floor {request.floor} in direction {request.direction}"
+            "serving_request",
+            floor=request.floor,
+            direction=request.direction.name,
         )
         # Calculate a score for each elevator (distance-based)
         for elevator_id, state in self.elevator_states.items():
             score = await self._calculate_score(state, request.floor, request.direction)
 
-            self.logger.info(f"Elevator {elevator_id} score: {score}")
+            self.logger.info(
+                "elevator_score",
+                elevator_id=elevator_id,
+                score=score,
+            )
             # Keep track of best elevator
             if score < best_score:
                 best_score = score

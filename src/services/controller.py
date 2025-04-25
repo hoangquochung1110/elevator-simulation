@@ -8,7 +8,7 @@ according to the patterns defined in the architecture document.
 
 import asyncio
 import json
-import logging
+import structlog
 from typing import List, Optional
 
 from ..channels import ELEVATOR_COMMANDS, ELEVATOR_STATUS
@@ -44,8 +44,7 @@ class ElevatorController:
         self._running = False
         self._movement_task = None
         self.elevator_state = None
-        self.logger = logging.getLogger(__name__)
-        # Logger handlers and level are configured centrally in application entry-point
+        self.logger = structlog.get_logger(__name__)
 
     async def start(self) -> None:
         """
@@ -78,7 +77,7 @@ class ElevatorController:
             except asyncio.CancelledError:
                 pass
 
-        self.logger.info(f"Elevator {self.elevator.id} service stopped")
+        self.logger.info("service_stopped", elevator_id=self.elevator.id)
 
     async def _handle_command(self, message) -> None:
         """
@@ -94,16 +93,16 @@ class ElevatorController:
         try:
             data = json.loads(message["data"])
             command = data.get("command")
-            self.logger.info(f"Received command: {command}")
+            self.logger.info("received_command", command=command)
             if command == "go_to_floor":
                 await self.go_to_floor(data.get("floor"))
             if command == "add_destination":
                 await self.add_destination(data.get("floor"))
 
         except json.JSONDecodeError:
-            self.logger.error(f"Invalid JSON in command: {message['data']}")
+            self.logger.error("invalid_json", raw=message["data"])
         except Exception as e:
-            self.logger.error(f"Error handling command: {e}")
+            self.logger.error("error_handling_command", error=str(e))
 
     async def go_to_floor(self, floor: int):
         """
@@ -114,11 +113,11 @@ class ElevatorController:
         """
 
         if floor < 1 or floor > NUM_FLOORS:
-            self.logger.warning(f"Invalid floor requested: {floor}")
+            self.logger.warning("invalid_floor", floor=floor)
             raise ValueError
 
         if floor == self.elevator.current_floor:
-            self.logger.info("Already at this floor, just open the door")
+            self.logger.info("duplicate_floor_request", floor=self.elevator.current_floor)
             # Already at this floor, just open the door
             await self.open_door()
             # Wait for passengers to enter/exit, then close door
@@ -145,7 +144,9 @@ class ElevatorController:
         await asyncio.sleep(self.elevator.door_operation_time)
 
         self.logger.info(
-            f"Elevator {self.elevator.id} doors opened at floor {self.elevator.current_floor}"
+            "doors_opened",
+            elevator_id=self.elevator.id,
+            floor=self.elevator.current_floor,
         )
 
     async def close_door(self) -> None:
@@ -164,7 +165,9 @@ class ElevatorController:
         await asyncio.sleep(self.elevator.door_operation_time)
 
         self.logger.info(
-            f"Elevator {self.elevator.id} doors closed at floor {self.elevator.current_floor}"
+            "doors_closed",
+            elevator_id=self.elevator.id,
+            floor=self.elevator.current_floor,
         )
 
     async def add_destination(self, floor: int, priority: int = 1) -> None:
@@ -176,15 +179,11 @@ class ElevatorController:
             priority: Priority (lower number = higher priority)
         """
         if floor < 1 or floor > NUM_FLOORS:
-            self.logger.warning(f"Invalid floor requested: {floor}")
+            self.logger.warning("invalid_floor", floor=floor)
             return
 
         if floor == self.elevator.current_floor:
-            self.logger.info(
-                "Already at floor %s Just open and close door "
-                "without actually address the request.",
-                self.elevator.current_floor,
-            )
+            self.logger.info("duplicate_floor_request", floor=self.elevator.current_floor)
             await self.open_door()
             await asyncio.sleep(2)
             await self.close_door()
@@ -258,8 +257,11 @@ class ElevatorController:
                 floors = abs(next_floor - self.elevator.current_floor)
                 movement_time = floors * self.elevator.floor_travel_time
                 self.logger.info(
-                    f"Elevator {self.elevator.id} moving from floor {self.elevator.current_floor} "
-                    f"to floor {next_floor}, ETA: {movement_time:.1f}s"
+                    "moving_to_floor",
+                    elevator_id=self.elevator.id,
+                    current_floor=self.elevator.current_floor,
+                    next_floor=next_floor,
+                    movement_time=movement_time,
                 )
                 await asyncio.sleep(movement_time)
                 # Arrive at next floor
@@ -268,7 +270,9 @@ class ElevatorController:
                 await self._publish_status()
                 await self._persist_state()
                 self.logger.info(
-                    f"Elevator {self.elevator.id} arrived at floor {next_floor}"
+                    "arrived_at_floor",
+                    elevator_id=self.elevator.id,
+                    floor=self.elevator.current_floor,
                 )
                 # Open doors and wait
                 await self.open_door()
