@@ -1,4 +1,8 @@
+# Manage FastAPI application configuration
+
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import structlog
 from dotenv import load_dotenv
@@ -6,8 +10,15 @@ from redis.asyncio import Redis
 
 load_dotenv()
 
+# Application timezone (default Ho Chi Minh)
+APP_TIMEZONE = os.getenv('APP_TIMEZONE', 'Asia/Ho_Chi_Minh')
+TIMEZONE = ZoneInfo(APP_TIMEZONE)
 
-def configure_logging():
+def now_iso() -> datetime:
+    """Return current timezone-aware datetime; leave formatting to clients."""
+    return datetime.now(TIMEZONE)
+
+def setup_logging() -> None:
     """
     Set up structured JSON logging for the application using structlog.
 
@@ -22,7 +33,7 @@ def configure_logging():
     """
     structlog.configure(
         processors=[
-            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.stdlib.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
