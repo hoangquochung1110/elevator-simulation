@@ -2,7 +2,6 @@
 import json
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -12,13 +11,13 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .channels import ELEVATOR_REQUESTS, ELEVATOR_STATUS, ELEVATOR_SYSTEM
-from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
+from .config import NUM_ELEVATORS, NUM_FLOORS, setup_logging, redis_client, now_iso
 
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging()
+    setup_logging()
 
     # initialize elevator states in Redis
     for i in range(1, NUM_ELEVATORS + 1):
@@ -107,13 +106,13 @@ async def create_internal_request(req: InternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": now_iso(),
             "id": str(uuid.uuid4()),
             "request_type": "internal",
             "status": "pending",
         }
     )
-    payload = json.dumps(request_data)
+    payload = json.dumps(request_data, default=lambda o: o.isoformat())
     await redis_client.publish(ELEVATOR_REQUESTS, payload)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
 
@@ -124,13 +123,13 @@ async def create_external_request(req: ExternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": now_iso(),
             "id": str(uuid.uuid4()),
             "request_type": "external",
             "status": "pending",
         }
     )
-    payload = json.dumps(request_data)
+    payload = json.dumps(request_data, default=lambda o: o.isoformat())
 
     await redis_client.publish(ELEVATOR_REQUESTS, payload)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS}
