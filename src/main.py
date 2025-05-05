@@ -3,26 +3,23 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, List
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .channels import (
-    ELEVATOR_COMMANDS,
-    ELEVATOR_REQUESTS,
-    ELEVATOR_STATUS,
-    ELEVATOR_SYSTEM,
-)
-from .config import NUM_ELEVATORS, NUM_FLOORS, redis_client
+from .channels import ELEVATOR_REQUESTS, ELEVATOR_STATUS, ELEVATOR_SYSTEM
+from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
 
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
+
     # initialize elevator states in Redis
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
@@ -87,7 +84,7 @@ class InternalRequestModel(BaseModel):
     )
 
 
-async def fetch_elevator_statuses() -> List[dict]:
+async def fetch_elevator_statuses() -> list[dict]:
     statuses = []
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)

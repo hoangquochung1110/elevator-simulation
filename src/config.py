@@ -1,8 +1,11 @@
 import os
+
+import structlog
 from dotenv import load_dotenv
 from redis.asyncio import Redis
-import logging
-import structlog
+
+load_dotenv()
+
 
 def configure_logging():
     """
@@ -17,11 +20,6 @@ def configure_logging():
 
     Call this once at startup so all modules use the same logging configuration.
     """
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        format="%(message)s",
-        level=getattr(logging, log_level, logging.INFO),
-    )
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
@@ -36,10 +34,6 @@ def configure_logging():
         cache_logger_on_first_use=True,
     )
 
-# initialize structured logging
-configure_logging()
-
-load_dotenv()
 
 redis_client = Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
@@ -51,29 +45,3 @@ redis_client = Redis(
 # Building configuration
 NUM_FLOORS = 10
 NUM_ELEVATORS = 3
-
-# Logging configuration as dict for dictConfig
-LOGGING_CONFIG = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'standard': {
-            'format': '%(asctime)s %(name)-30s %(levelname)-8s %(message)s',
-            'datefmt': '%H:%M:%S',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'standard',
-            'stream': 'ext://sys.stdout',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-    },
-}
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOGGING_CONFIG['handlers']['console']['level'] = LOG_LEVEL
-LOGGING_CONFIG['root']['level'] = LOG_LEVEL
