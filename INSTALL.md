@@ -1,3 +1,5 @@
+This document is to guide you through the installation and setup of the Redis Pub/Sub 101 project.
+
 ## Installation
 
 ### Prerequisites
