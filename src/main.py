@@ -3,24 +3,17 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Any, Optional
 
-from typing import Any, List, Optional
-
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .channels import ELEVATOR_REQUESTS, ELEVATOR_STATUS, ELEVATOR_SYSTEM
-
-from .channels import (
-    ELEVATOR_COMMANDS,
-    ELEVATOR_REQUESTS,
-    ELEVATOR_STATUS,
-    ELEVATOR_SYSTEM,
-    ELEVATOR_REQUESTS_STREAM,
-)
+from .channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS,
+                       ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS,
+                       ELEVATOR_SYSTEM)
 from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
 
 
