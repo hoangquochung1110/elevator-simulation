@@ -11,9 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS,
-                       ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS,
-                       ELEVATOR_SYSTEM)
+from .channels import ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS
 from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
 
 
@@ -39,22 +37,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Redis Pub/Sub API", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
-
-
-class PublishRequest(BaseModel):
-    channel: str = Field(..., description="One of the predefined channels")
-    message: Any = Field(..., description="Payload to publish; will be JSON‑encoded")
-
-    @field_validator("channel")
-    def check_channel(cls, v: str) -> str:
-        fixed = {ELEVATOR_REQUESTS, ELEVATOR_SYSTEM}
-        if (
-            v in fixed
-            or v.startswith("elevator:commands:")
-            or v.startswith("elevator:status:")
-        ):
-            return v
-        raise ValueError(f"invalid channel: {v!r}")
 
 
 class ExternalRequestModel(BaseModel):
@@ -116,7 +98,7 @@ async def create_internal_request(req: InternalRequestModel):
         }
     )
     await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
-    return {"status": "queued", "channel": ELEVATOR_REQUESTS}
+    return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
@@ -134,7 +116,7 @@ async def create_external_request(req: ExternalRequestModel):
 
     # Streams should accept Python dict
     await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
-    return {"status": "queued", "channel": ELEVATOR_REQUESTS}
+    return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.get("/api/elevators", status_code=200)

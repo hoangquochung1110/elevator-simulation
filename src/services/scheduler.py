@@ -1,11 +1,12 @@
 import asyncio
 import json
-import structlog
 from typing import Dict, Optional
+
+import structlog
 from redis.exceptions import RedisError
 
-from ..channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS,
-                        ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS)
+from ..channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
+                        ELEVATOR_STATUS)
 from ..config import NUM_ELEVATORS, redis_client
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
