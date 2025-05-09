@@ -4,6 +4,8 @@ import structlog
 from dotenv import load_dotenv
 from redis.asyncio import Redis
 
+from .channels import *
+
 load_dotenv()
 
 

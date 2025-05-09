@@ -3,16 +3,16 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from .channels import ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS
-from .config import NUM_ELEVATORS, NUM_FLOORS, configure_logging, redis_client
+from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
+                      NUM_FLOORS, configure_logging, redis_client)
 
 
 # --- Startup and shutdown events ---
@@ -35,8 +35,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Redis Pub/Sub API", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="src/static"), name="static")
-templates = Jinja2Templates(directory="src/templates")
+app.mount("/static", StaticFiles(directory="src/app/static"), name="static")
+templates = Jinja2Templates(directory="src/app/templates")
 
 
 class ExternalRequestModel(BaseModel):
