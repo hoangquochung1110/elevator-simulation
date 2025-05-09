@@ -30,5 +30,15 @@ services:
     depends_on:
       - redis
 
+  controller:
+    build:
+      context: .
+      dockerfile: src/controller/Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+
 volumes:
   redis-data:
