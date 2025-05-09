@@ -59,8 +59,13 @@ class ElevatorController:
         # Load initial elevator states
         await self._load_elevator_state()
 
-        async for msg in self.pubsub.listen():
-            await self._handle_command(msg)
+        try:
+            async for msg in self.pubsub.listen():
+                if not self._running:
+                    break
+                await self._handle_command(msg)
+        finally:
+            await self.stop()
 
     async def stop(self) -> None:
         """Stop the elevator service."""
@@ -119,7 +124,7 @@ class ElevatorController:
                 exc_info=True,
             )
 
-    async def go_to_floor(self, floor: int):
+    async def go_to_floor(self, floor: int) -> None:
         """
         Command the elevator to go to a specific floor.
 
@@ -143,7 +148,7 @@ class ElevatorController:
         # Add as highest priority destination
         await self.add_destination(floor, priority=0)
 
-    async def open_door(self):
+    async def open_door(self) -> None:
         """Open the elevator door."""
         if self.elevator.door_status == DoorStatus.OPEN:
             return
@@ -210,7 +215,7 @@ class ElevatorController:
         await self._publish_status()
 
         # Start movement if not already moving
-        if self._movement_task is None or self._movement_task.done():
+        if not self._movement_task or self._movement_task.done():
             self._movement_task = asyncio.create_task(self._process_movement())
 
     async def _publish_status(self):

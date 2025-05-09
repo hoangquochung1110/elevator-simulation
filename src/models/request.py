@@ -74,10 +74,10 @@ class ExternalRequest(BaseRequest):
         direction: UP or DOWN direction
     """
 
-    def __init__(self, floor: int, direction: Direction):
+    def __init__(self, floor: int | str, direction: Direction):
         super().__init__()
-        self.floor = floor
-        self.direction = direction
+        self.floor = int(floor)
+        self.direction = Direction(direction)
 
     def to_dict(self) -> dict:
         """
@@ -135,8 +135,8 @@ class InternalRequest(BaseRequest):
 
     def __init__(self, elevator_id: int, destination_floor: int):
         super().__init__()
-        self.elevator_id = elevator_id
-        self.destination_floor = destination_floor
+        self.elevator_id = int(elevator_id)
+        self.destination_floor = int(destination_floor)
 
     def to_dict(self) -> dict:
         """
