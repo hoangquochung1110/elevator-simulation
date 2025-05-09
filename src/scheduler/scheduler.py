@@ -48,8 +48,6 @@ class Scheduler:
             groupname=SCHEDULER_GROUP,
             consumername=self.consumer_id,
             streams={ELEVATOR_REQUESTS_STREAM: "0"},
-            count=10,
-            block=0,
         )
         if pending_stream_entries:
             for _, messages in pending_stream_entries:
@@ -64,8 +62,6 @@ class Scheduler:
                     groupname=SCHEDULER_GROUP,
                     consumername=self.consumer_id,
                     streams={ELEVATOR_REQUESTS_STREAM: ">"},
-                    count=10,  # Process in smaller batches
-                    block=2000,
                 )
                 if not stream_entries:
                     self.logger.debug("No new stream entries")
