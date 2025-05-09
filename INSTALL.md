@@ -2,26 +2,22 @@
 
 ### Prerequisites
 
-- Redis server (>= 5.x)
+- Docker and Docker Compose
 
 ### Running Services
 
-1. Start Redis:
-   ```sh
-   docker compose up -d
-   ```
-2. Start the FastAPI web app:
-   ```sh
-   uvicorn src.main:app --reload
-   ```
-3. Start the scheduler and controllers:
-   ```sh
-   python -m src.services.run_services
-   ```
-4. (Optional) Start the log subscriber:
-   ```sh
-   python src/subscriber.py
-   ```
+All services have been containerized for easy deployment:
+
+```sh
+docker compose up -d
+```
+
+This will start:
+
+- Redis server
+- Web application (FastAPI)
+- Scheduler service
+- Controller service
 
 ### Accessing the Dashboard
 
