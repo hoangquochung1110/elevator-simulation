@@ -5,14 +5,14 @@ from typing import Dict, Optional
 import structlog
 from redis.exceptions import RedisError
 
-from ..channels import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
-                        ELEVATOR_STATUS)
-from ..config import NUM_ELEVATORS, redis_client
+from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
+                      ELEVATOR_STATUS, NUM_ELEVATORS, redis_client)
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
 
 SCHEDULER_GROUP = "scheduler-group"
 
+logger = structlog.get_logger(__name__)
 
 class Scheduler:
     """
@@ -27,8 +27,8 @@ class Scheduler:
         self.consumer_id = f"scheduler-{id}"
         self.redis_client = redis_client
         self.elevator_states: Dict[int, Elevator] = {}
-        self.logger = structlog.get_logger(__name__)
         self._running: bool = False
+        self.logger = logger
         # Logger handlers and level are configured centrally in application entry-point
 
     async def start(self) -> None:

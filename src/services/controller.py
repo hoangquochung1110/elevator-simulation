@@ -8,11 +8,12 @@ according to the patterns defined in the architecture document.
 
 import asyncio
 import json
-import structlog
 from typing import List, Optional
 
-from ..channels import ELEVATOR_COMMANDS, ELEVATOR_STATUS
-from ..config import NUM_ELEVATORS, NUM_FLOORS, redis_client
+import structlog
+
+from ..config import (ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_ELEVATORS,
+                      NUM_FLOORS, redis_client)
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 

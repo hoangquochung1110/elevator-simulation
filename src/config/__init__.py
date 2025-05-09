@@ -22,6 +22,17 @@ def configure_logging():
 
     Call this once at startup so all modules use the same logging configuration.
     """
+    import logging
+    import sys
+
+    # Configure the root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)  # Set appropriate level
+
+    # Create handler that writes to stdout
+    handler = logging.StreamHandler(sys.stdout)
+    root_logger.addHandler(handler)
+
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
