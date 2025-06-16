@@ -1,9 +1,11 @@
 import asyncio
 import json
-from typing import Dict, Optional
+import random
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 import structlog
-from redis.exceptions import RedisError
+from redis.exceptions import ConnectionError, RedisError
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
                       ELEVATOR_STATUS, NUM_ELEVATORS, redis_client)
@@ -13,6 +15,121 @@ from ..models.request import Direction, ExternalRequest, InternalRequest
 SCHEDULER_GROUP = "scheduler-group"
 
 logger = structlog.get_logger(__name__)
+
+MAX_RETRIES = 3
+
+async def _exponential_backoff(attempt: int, max_delay: int = 32) -> None:
+    """Calculate exponential backoff delay with jitter."""
+    delay = min(max_delay, (2 ** attempt) + (random.random() * 0.1))
+    await asyncio.sleep(delay)
+
+@asynccontextmanager
+async def redis_xreadgroup_with_ack(
+    redis_client,
+    group_name: str,
+    consumer_name: str,
+    streams: Dict[str, str],
+    count: Optional[int] = None,
+    block: Optional[int] = None,
+    auto_ack: bool = True,
+    max_retries: int = 3
+) -> AsyncGenerator[List[Tuple[str, List[Tuple[str, Dict]]]], None]:
+    """
+    Context manager that wraps xreadgroup with automatic acknowledgment and retry logic.
+
+    Args:
+        redis_client: Redis client instance
+        group_name: Consumer group name
+        consumer_name: Consumer name within the group
+        streams: Dictionary of stream names and IDs
+        count: Maximum number of entries to read
+        block: Blocking timeout in milliseconds
+        auto_ack: Whether to automatically acknowledge messages
+        max_retries: Maximum number of retry attempts for transient errors
+    """
+    logger = structlog.get_logger(__name__)
+    entries_to_ack = []
+    attempt = 0
+
+    while True:
+        try:
+            # Read from streams
+            stream_data = await redis_client.xreadgroup(
+                groupname=group_name,
+                consumername=consumer_name,
+                streams=streams,
+                count=count,
+                block=block
+            )
+
+            # Collect entries for acknowledgment
+            for stream_name, stream_entries in stream_data:
+                for entry_id, fields in stream_entries:
+                    entries_to_ack.append((stream_name, entry_id))
+
+            # Yield in original format
+            yield stream_data
+
+            # Auto-acknowledge all entries if enabled and no exception occurred
+            if auto_ack and entries_to_ack:
+                try:
+                    # Group entries by stream for efficient acking
+                    streams_to_ack = {}
+                    for stream_name, entry_id in entries_to_ack:
+                        if stream_name not in streams_to_ack:
+                            streams_to_ack[stream_name] = []
+                        streams_to_ack[stream_name].append(entry_id)
+
+                    # Acknowledge entries for each stream
+                    for stream_name, entry_ids in streams_to_ack.items():
+                        await redis_client.xack(stream_name, group_name, *entry_ids)
+                except Exception as e:
+                    logger.error(
+                        "Failed to acknowledge messages",
+                        error=str(e),
+                        stream_name=stream_name,
+                        group_name=group_name,
+                        entries=entry_ids,
+                        exc_info=True
+                    )
+                    raise
+
+            # If we get here, everything worked, so break the retry loop
+            break
+
+        except ConnectionError as e:
+            # Handle transient connection errors with retry logic
+            attempt += 1
+            if attempt >= max_retries:
+                logger.error(
+                    "Max retries exceeded for Redis operation",
+                    error=str(e),
+                    attempt=attempt,
+                    exc_info=True
+                )
+                raise
+
+            logger.warning(
+                "Redis connection error, retrying",
+                error=str(e),
+                attempt=attempt,
+                max_retries=max_retries
+            )
+            await _exponential_backoff(attempt)
+
+        except Exception as e:
+            # Log any other exceptions before re-raising
+            logger.error(
+                "Unexpected error in redis_xreadgroup_with_ack",
+                error=str(e),
+                error_type=type(e).__name__,
+                group_name=group_name,
+                consumer_name=consumer_name,
+                streams=streams,
+                exc_info=True
+            )
+            raise
+
 
 class Scheduler:
     """
@@ -44,31 +161,38 @@ class Scheduler:
         await self._load_elevator_states()
 
         # Claim and process any pending entries for this consumer
-        pending_stream_entries = await self.redis_client.xreadgroup(
-            groupname=SCHEDULER_GROUP,
-            consumername=self.consumer_id,
+        async with redis_xreadgroup_with_ack(
+            self.redis_client,
+            group_name=SCHEDULER_GROUP,
+            consumer_name=self.consumer_id,
             streams={ELEVATOR_REQUESTS_STREAM: "0"},
-        )
-        if pending_stream_entries:
-            for _, messages in pending_stream_entries:
-                for message in messages:
-                    await self._handle_message(message)
+            auto_ack=True,
+            max_retries=MAX_RETRIES,
+        ) as pending_stream_entries:
+            # Process pending entries
+            if pending_stream_entries:
+                for stream_name, messages in pending_stream_entries:
+                    for message in messages:
+                        await self._handle_message(message)
 
         # subscribe to the elevator requests channel
         while self._running:
             try:
                 # Block up to 1 second for new, unseen entries
-                stream_entries = await self.redis_client.xreadgroup(
-                    groupname=SCHEDULER_GROUP,
-                    consumername=self.consumer_id,
+                async with redis_xreadgroup_with_ack(
+                    self.redis_client,
+                    group_name=SCHEDULER_GROUP,
+                    consumer_name=self.consumer_id,
                     streams={ELEVATOR_REQUESTS_STREAM: ">"},
-                )
-                if not stream_entries:
-                    self.logger.debug("No new stream entries")
-                    continue
-                for stream, messages in stream_entries:
-                    for message in messages:
-                        await self._handle_message(message)
+                    auto_ack=True,
+                    max_retries=MAX_RETRIES,
+                ) as stream_entries:
+                    if not stream_entries:
+                        self.logger.debug("No new stream entries")
+                        continue
+                    for stream, messages in stream_entries:
+                        for message in messages:
+                            await self._handle_message(message)
             except Exception:
                 self.logger.error("Error in scheduler loop", exc_info=True)
                 await asyncio.sleep(1)
@@ -84,27 +208,28 @@ class Scheduler:
         try:
             # Message processing logic
             request_type = data.get("request_type")
-            self.logger.info("Received %s request: %s", request_type, data)
+            self.logger.info(
+                "received_request: %s",
+                request_type=request_type,
+                data=data,
+            )
             if request_type == "external":
                 request = ExternalRequest.from_dict(data)
                 await self._handle_external_request(request)
             elif request_type == "internal":
                 request = InternalRequest.from_dict(data)
                 await self._handle_internal_request(request)
-
-            # TODO: "publisher" should implement request-reply pattern
-            # or side table for tracking processed messages
-            await self.redis_client.xack(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, msg_id)
         except Exception:
-            self.logger.error("Error processing message %s", msg_id, exc_info=True)
+            self.logger.error(
+                "message_handling_error",
+                message_id=msg_id,
+                exc_info=True,
+            )
 
     async def _handle_external_request(self, request):
         # Decide which elevator should handle this request
         elevator_id = await self._select_best_elevator_for_external(request)
         if elevator_id:
-            self.logger.info(
-                f"Handling external request from floor {request.floor} to elevator {elevator_id}"
-            )
             command = {
                 "correlation_id": request.id,
                 "command": "go_to_floor",
@@ -137,9 +262,6 @@ class Scheduler:
             "floor": request.destination_floor,
             "request_id": request.id,
         }
-        self.logger.info(
-            f"Handling external request from floor {request.destination_floor} to elevator {request.elevator_id}"
-        )
         # publish command to a channel
         await self.redis_client.publish(
             ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)

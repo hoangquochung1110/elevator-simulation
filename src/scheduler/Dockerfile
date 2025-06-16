@@ -5,21 +5,19 @@ WORKDIR /app
 # Install uv (keeping consistent with your webapp Dockerfile)
 RUN pip install --no-cache-dir uv
 
-# Copy pyproject.toml for dependencies
+# Copy only dependency files first
 COPY pyproject.toml .
+COPY uv.lock .
 
-# Install dependencies
+# Install dependencies in a separate layer
 RUN uv pip install --system -e .
 
-# Copy only the necessary code
-# This selective copying reduces image size and improves build caching
+# In development, source code will be mounted as a volume
+# Only copying __init__.py as a placeholder for development
 COPY ./src/__init__.py /app/src/
-COPY ./src/config /app/src/config/
-COPY ./src/models /app/src/models/
-COPY ./src/scheduler /app/src/scheduler/
 
-# Set environment to development for better console logging
-ENV ENV=development
+# Add watchdog for auto-reloading in development
+RUN pip install watchdog[watchmedo]
 
-# Command to run the scheduler service
-CMD ["python", "-m", "src.scheduler.main"]
+# Use watchmedo to auto-reload on file changes
+CMD ["watchmedo", "auto-restart", "--directory=/app/src", "--pattern=*.py", "--recursive", "--", "python", "-m", "src.scheduler.main"]

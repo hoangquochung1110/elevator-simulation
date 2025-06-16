@@ -5,14 +5,17 @@ WORKDIR /app
 # Install uv
 RUN pip install --no-cache-dir uv
 
-# Copy pyproject.toml and install dependencies from it
+# Copy only dependency files first
 COPY pyproject.toml .
+COPY uv.lock .
+
+# Install dependencies in a separate layer
 RUN uv pip install --system -e .
 
-# Copy the src directory to maintain the correct import structure
-COPY ./src /app/src
+# Only copy __init__.py as placeholder, rest will be mounted
+COPY ./src/__init__.py /app/src/
 
 EXPOSE 8000
 
-# Update the command to use the correct module path
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with reload flag for development
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src"]
