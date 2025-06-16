@@ -25,6 +25,12 @@ def configure_logging():
     import logging
     import sys
 
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=logging.INFO,
+    )
+
     # Configure the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)  # Set appropriate level
@@ -72,6 +78,7 @@ async def get_redis_client():
         await _redis_adapter.initialize()
 
     return _redis_adapter.client
+
 
 # Building configuration
 NUM_FLOORS = 10
