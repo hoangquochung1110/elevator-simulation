@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Development workflow improvements: Hot reloading setup for all services (webapp, scheduler, controller) with volume mounts and optimized Docker builds
+
 ## [0.0.1] - 2025-06-15
 
 ### Added
