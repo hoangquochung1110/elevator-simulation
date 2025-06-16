@@ -16,9 +16,12 @@ services:
       dockerfile: src/app/Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ./src:/app/src
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
     depends_on:
       - redis
 
@@ -26,9 +29,12 @@ services:
     build:
       context: .
       dockerfile: src/scheduler/Dockerfile
+    volumes:
+      - ./src:/app/src
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
     depends_on:
       - redis
 
@@ -36,9 +42,12 @@ services:
     build:
       context: .
       dockerfile: src/controller/Dockerfile
+    volumes:
+      - ./src:/app/src
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
     depends_on:
       - redis
 
