@@ -3,22 +3,35 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
+from redis.asyncio import Redis
 
 from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
-                      NUM_FLOORS, configure_logging, redis_client)
+                      NUM_FLOORS, configure_logging, get_redis_client)
+
+
+# --- Redis dependency ---
+async def get_redis() -> AsyncGenerator[Redis, None]:
+    """FastAPI dependency that yields a Redis client."""
+    client = await get_redis_client()
+    try:
+        yield client
+    finally:
+        # No need to close since we're using a singleton pattern in config
+        pass
 
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    redis_client = await get_redis_client()
 
     # initialize elevator states in Redis
     for i in range(1, NUM_ELEVATORS + 1):
@@ -68,11 +81,12 @@ class InternalRequestModel(BaseModel):
     )
 
 
-async def fetch_elevator_statuses() -> list[dict]:
+async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dict]:
     statuses = []
+
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
-        raw = await redis_client.get(key)
+        raw = await redis.get(key)
         if not raw:
             continue
         try:
@@ -86,7 +100,10 @@ async def fetch_elevator_statuses() -> list[dict]:
 
 
 @app.post("/api/requests/internal", status_code=202)
-async def create_internal_request(req: InternalRequestModel):
+async def create_internal_request(
+    req: InternalRequestModel,
+    redis: Redis = Depends(get_redis)
+):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
     request_data.update(
@@ -97,12 +114,15 @@ async def create_internal_request(req: InternalRequestModel):
             "status": "pending",
         }
     )
-    await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
-async def create_external_request(req: ExternalRequestModel):
+async def create_external_request(
+    req: ExternalRequestModel,
+    redis: Redis = Depends(get_redis)
+):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
     request_data.update(
@@ -115,19 +135,19 @@ async def create_external_request(req: ExternalRequestModel):
     )
 
     # Streams should accept Python dict
-    await redis_client.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.get("/api/elevators", status_code=200)
-async def get_elevators():
-    return {"elevators": await fetch_elevator_statuses()}
+async def get_elevators(redis: Redis = Depends(get_redis)):
+    return {"elevators": await fetch_elevator_statuses(redis)}
 
 
 @app.get("/api/requests", status_code=200)
-async def get_stream_requests():
+async def get_stream_requests(redis: Redis = Depends(get_redis)):
     """Retrieve all entries from the elevator requests stream"""
-    entries = await redis_client.xrange(ELEVATOR_REQUESTS_STREAM, "-", "+")
+    entries = await redis.xrange(ELEVATOR_REQUESTS_STREAM, "-", "+")
     requests = []
     for msg_id, fields in entries:
         # include message ID with each entry
@@ -142,6 +162,7 @@ async def trim_stream(
     min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
     maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
+    redis: Redis = Depends(get_redis)
 ):
     """
     Trim the elevator requests stream using XTRIM.
@@ -152,14 +173,14 @@ async def trim_stream(
         raise HTTPException(status_code=400, detail="Provide exactly one of min_id or maxlen")
     # Trim by count
     if maxlen is not None:
-        trimmed_count = await redis_client.xtrim(
+        trimmed_count = await redis.xtrim(
             ELEVATOR_REQUESTS_STREAM,
             maxlen=maxlen,
             approximate=approximate,
         )
     else:
         # Trim by ID
-        trimmed_count = await redis_client.xtrim(
+        trimmed_count = await redis.xtrim(
             ELEVATOR_REQUESTS_STREAM,
             minid=min_id,
             approximate=approximate,
@@ -168,17 +189,22 @@ async def trim_stream(
 
 
 @app.get("/elevator-table", response_class=HTMLResponse)
-async def elevator_table(request: Request):
-    elevators = await fetch_elevator_statuses()
+async def elevator_table(
+    request: Request,
+    redis: Redis = Depends(get_redis)
+):
+    elevators = await fetch_elevator_statuses(redis)
     return templates.TemplateResponse(
         "elevator_table.html", {"request": request, "elevators": elevators}
     )
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    result = await get_elevators()
-    elevators = result["elevators"]
+async def index(
+    request: Request,
+    redis: Redis = Depends(get_redis)
+):
+    elevators = await fetch_elevator_statuses(redis)
     return templates.TemplateResponse(
         "index.html", {"request": request, "elevators": elevators}
     )

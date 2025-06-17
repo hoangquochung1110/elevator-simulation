@@ -2,9 +2,9 @@ import os
 
 import structlog
 from dotenv import load_dotenv
-from redis.asyncio import Redis
 
 from .channels import *
+from .redis_adapter import RedisAdapter
 
 load_dotenv()
 
@@ -48,12 +48,30 @@ def configure_logging():
     )
 
 
-redis_client = Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    password=os.getenv("REDIS_PASSWORD", None),
-    decode_responses=True,
-)
+# Initialize Redis adapter based on environment
+_redis_adapter = None
+
+async def get_redis_client():
+    """Get Redis client instance, initializing if needed."""
+    global _redis_adapter
+
+    if _redis_adapter is None:
+        if os.getenv("TESTING") == "True":
+            from fakeredis.aioredis import FakeRedis
+            return FakeRedis(decode_responses=True)
+
+        # Determine if we're using cluster mode
+        cluster_mode = os.getenv("REDIS_CLUSTER_MODE", "false").lower() == "true"
+
+        _redis_adapter = RedisAdapter(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD"),
+            cluster_mode=cluster_mode
+        )
+        await _redis_adapter.initialize()
+
+    return _redis_adapter.client
 
 # Building configuration
 NUM_FLOORS = 10

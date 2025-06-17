@@ -8,7 +8,7 @@ import structlog
 from redis.exceptions import ConnectionError, RedisError
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
-                      ELEVATOR_STATUS, NUM_ELEVATORS, redis_client)
+                      ELEVATOR_STATUS, NUM_ELEVATORS, get_redis_client)
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
 
@@ -142,7 +142,7 @@ class Scheduler:
     def __init__(self, id):
         self.id = id
         self.consumer_id = f"scheduler-{id}"
-        self.redis_client = redis_client
+        self.redis_client = None
         self.elevator_states: Dict[int, Elevator] = {}
         self._running: bool = False
         self.logger = logger
@@ -150,6 +150,8 @@ class Scheduler:
 
     async def start(self) -> None:
         self._running = True
+        self.redis_client = await get_redis_client()
+
         # Ensure consumer group exists
         try:
             await self.redis_client.xgroup_create(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, mkstream=True)
