@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     redis_client = await get_redis_client()
 
     # initialize elevator states in Redis
+    redis_client = await get_redis_client()
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
         initial_state = {
@@ -79,6 +80,7 @@ class InternalRequestModel(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={"example": {"elevator_id": 1, "destination_floor": 5}}
     )
+
 
 
 async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dict]:

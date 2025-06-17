@@ -53,6 +53,8 @@ class ElevatorController:
         This starts the command subscriber and initializes the elevator state.
         """
         self._running = True
+        self.redis_client = await get_redis_client()
+        self.pubsub = self.redis_client.pubsub()
         # subscribe to the elevator requests channel
         self.redis_client = await get_redis_client()
         self.pubsub = self.redis_client.pubsub()
@@ -250,13 +252,12 @@ class ElevatorController:
         )
 
     async def _load_elevator_state(self) -> None:
-        key = ELEVATOR_STATUS.format(self.elevator.id)
+        key = self.status_channel
         state = await self.redis_client.get(key)
         if state:
-            # Convert to proper types
-            self.elevator_state = Elevator.from_dict(json.loads(state))
+            self.elevator = Elevator.from_dict(json.loads(state))
         else:
-            raise ValueError(f"Elevator {elevator_id} not found")
+            self.logger.warning("elevator_state_not_found", elevator_id=self.elevator.id)
 
     async def _process_movement(self) -> None:
         """
