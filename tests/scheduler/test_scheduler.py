@@ -10,8 +10,7 @@ from src.models.request import Direction, ExternalRequest
 from src.scheduler.scheduler import Scheduler, redis_xreadgroup_with_ack
 
 
-@pytest.mark.asyncio
-async def test_scheduler_handles_external_request(redis_client, scheduler_with_mock_elevators):
+async def test_scheduler_handles_external_request(redis_client, elevators):
     # Arrange
     scheduler = Scheduler(id="test-1")
     scheduler.redis_client = redis_client
@@ -45,7 +44,6 @@ async def test_scheduler_handles_external_request(redis_client, scheduler_with_m
     assert elevator_id == 1
 
 
-@pytest.mark.asyncio
 async def test_scheduler_handles_connection_retry(redis_client, mocker):
     # Arrange
     scheduler = Scheduler(id="test-1")
@@ -81,7 +79,6 @@ async def test_scheduler_handles_connection_retry(redis_client, mocker):
     assert not mock_xack.called  # Should not reach ack step due to persistent error
 
 
-@pytest.mark.asyncio
 async def test_scheduler_calculates_correct_scores(redis_client):
     # Arrange
     scheduler = Scheduler(id="test-1")

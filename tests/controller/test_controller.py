@@ -10,7 +10,6 @@ from src.controller.controller import ElevatorController
 from src.models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
-@pytest.mark.asyncio
 async def test_controller_error_handling(redis_client):
     """Test controller handles errors gracefully."""
     controller = None
