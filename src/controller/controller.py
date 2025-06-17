@@ -12,7 +12,7 @@ import json
 import structlog
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS,
-                      redis_client)
+                      get_redis_client)
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
@@ -36,8 +36,8 @@ class ElevatorController:
             initial_floor: The floor where this elevator starts
         """
         self.elevator = Elevator(elevator_id=elevator_id, initial_floor=initial_floor)
-        self.redis_client = redis_client
-        self.pubsub = self.redis_client.pubsub()
+        self.redis_client = None
+        self.pubsub = None
         # Set up subscriber for command channel
         self.command_channel = ELEVATOR_COMMANDS.format(elevator_id)
         self.status_channel = ELEVATOR_STATUS.format(elevator_id)
@@ -54,6 +54,8 @@ class ElevatorController:
         """
         self._running = True
         # subscribe to the elevator requests channel
+        self.redis_client = await get_redis_client()
+        self.pubsub = self.redis_client.pubsub()
         await self.pubsub.subscribe(self.command_channel)
 
         # Load initial elevator states
@@ -249,7 +251,7 @@ class ElevatorController:
 
     async def _load_elevator_state(self) -> None:
         key = ELEVATOR_STATUS.format(self.elevator.id)
-        state = await redis_client.get(key)
+        state = await self.redis_client.get(key)
         if state:
             # Convert to proper types
             self.elevator_state = Elevator.from_dict(json.loads(state))

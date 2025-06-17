@@ -9,7 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Redis Cluster support
+  - New RedisAdapter class for unified Redis operations
+  - Transparent switching between single-node and cluster modes
+  - Retry mechanism with exponential backoff for Redis operations
+  - Environment-based configuration for deployment flexibility
 - Development workflow improvements: Hot reloading setup for all services (webapp, scheduler, controller) with volume mounts and optimized Docker builds
+- Enhanced Docker Compose configuration
+  - Support for both single Redis instance and Redis Cluster deployments
+  - Development profile with single Redis node
+  - Production profile with 3 master + 3 replica Redis Cluster
+
+### Changed
+
+- Refactored services to use dependency injection for Redis clients
+- Updated installation documentation with Redis Cluster setup instructions
+- Improved error handling and connection management in Redis operations
 
 ## [0.0.1] - 2025-06-15
 
