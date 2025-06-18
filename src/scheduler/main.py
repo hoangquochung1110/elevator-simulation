@@ -10,12 +10,12 @@ import asyncio
 import os
 import signal
 import sys
+from typing import Dict, Any
 
 import structlog
 
 from src.config import configure_logging
-from src.scheduler.scheduler import \
-    Scheduler  # Assuming you move scheduler.py to this location
+from src.scheduler.factory import create_scheduler
 
 # Set up graceful shutdown
 shutdown_event = asyncio.Event()
@@ -35,22 +35,41 @@ def handle_signals():
     signal.signal(signal.SIGTERM, handle_exit)
 
 
+def get_config() -> Dict[str, Any]:
+    """Load configuration from environment variables."""
+    # Set Redis environment variables if not already set
+    os.environ.setdefault('REDIS_HOST', 'localhost')
+    os.environ.setdefault('REDIS_PORT', '6379')
+    os.environ.setdefault('REDIS_DB', '0')
+    
+    return {
+        'scheduler_id': os.getenv('SCHEDULER_ID', '1'),
+        # Redis config is read from environment variables directly by get_redis_client()
+        'redis_config': {},
+        'pubsub_config': {
+            'provider': os.getenv('PUBSUB_PROVIDER', 'redis'),
+        },
+        'event_stream_config': {
+            # Add any event stream specific config here
+        }
+    }
+
+
 async def main():
-    """
-    Main entry point for the Scheduler service.
-    """
-    # Configure logging for containerized environment
-
+    """Main entry point for the Scheduler service."""
     try:
+        # Load configuration
+        config = get_config()
+        
         # Log service startup
-        logger.info("scheduler_starting",
-                   redis_host=os.getenv("REDIS_HOST", "localhost"),
-                   redis_port=os.getenv("REDIS_PORT", 6379))
-        # Initialize scheduler with unique ID (configurable via env var)
-        scheduler_id = int(os.getenv("SCHEDULER_ID", 1))
-        scheduler = Scheduler(id=scheduler_id)
-
-        # Start scheduler and wait for shutdown signal
+        logger.info(
+            "scheduler_starting",
+            scheduler_id=config['scheduler_id'],
+            **config['redis_config']
+        )
+        
+        # Create and start scheduler
+        scheduler = await create_scheduler(config)
         scheduler_task = asyncio.create_task(scheduler.start())
 
         # Wait for shutdown signal
