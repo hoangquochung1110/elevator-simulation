@@ -44,7 +44,7 @@ async def main():
     try:
         # Log service startup
         logger.info("scheduler_starting",
-                   redis_host=os.getenv("REDIS_HOST", "localhost"),
+                   redis_host=os.getenv("REDIS_HOST", "redis"),
                    redis_port=os.getenv("REDIS_PORT", 6379))
         # Initialize scheduler with unique ID (configurable via env var)
         scheduler_id = int(os.getenv("SCHEDULER_ID", 1))

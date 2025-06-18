@@ -11,6 +11,11 @@ from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
                       ELEVATOR_STATUS, NUM_ELEVATORS, get_redis_client)
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
+from ..libs.messaging.event_stream import (EventStreamClient, StreamProvider,
+                                           create_stream_client)
+from ..libs.messaging.pubsub import (PubSubClient, PubSubProvider,
+                                     create_pubsub_client)
+
 
 SCHEDULER_GROUP = "scheduler-group"
 
@@ -143,6 +148,8 @@ class Scheduler:
         self.id = id
         self.consumer_id = f"scheduler-{id}"
         self.redis_client = None
+        self.event_stream = None
+        self.pubsub = None
         self.elevator_states: Dict[int, Elevator] = {}
         self._running: bool = False
         self.logger = logger
@@ -151,50 +158,82 @@ class Scheduler:
     async def start(self) -> None:
         self._running = True
         self.redis_client = await get_redis_client()
-
+        if not self.event_stream:
+            self.event_stream = await create_stream_client(
+                provider=StreamProvider.REDIS
+            )
         # Ensure consumer group exists
-        try:
-            await self.redis_client.xgroup_create(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, mkstream=True)
-        except RedisError as e:
-            if "BUSYGROUP" not in str(e):
-                raise
+        await self.event_stream.create_consumer_group(
+            stream=ELEVATOR_REQUESTS_STREAM,
+            group=SCHEDULER_GROUP,
+            mkstream=True,
+        )
+
 
         # Load initial elevator states
         await self._load_elevator_states()
 
         # Claim and process any pending entries for this consumer
-        async with redis_xreadgroup_with_ack(
-            self.redis_client,
-            group_name=SCHEDULER_GROUP,
-            consumer_name=self.consumer_id,
-            streams={ELEVATOR_REQUESTS_STREAM: "0"},
-            auto_ack=True,
-            max_retries=MAX_RETRIES,
-        ) as pending_stream_entries:
-            # Process pending entries
-            if pending_stream_entries:
-                for stream_name, messages in pending_stream_entries:
-                    for message in messages:
-                        await self._handle_message(message)
+        pending_stream_entries = self.event_stream.resume_processing
+        if pending_stream_entries:
+            for stream_name, messages in pending_stream_entries:
+                for message in messages:
+                    await self._handle_message(message)
+                    self.event_stream.acknowledge(
+                        stream=ELEVATOR_REQUESTS_STREAM,
+                        group=SCHEDULER_GROUP,
+                        message_ids=[message.id]
+                    )
+
+        # Claim and process any pending entries for this consumer
+        # async with redis_xreadgroup_with_ack(
+        #     self.redis_client,
+        #     group_name=SCHEDULER_GROUP,
+        #     consumer_name=self.consumer_id,
+        #     streams={ELEVATOR_REQUESTS_STREAM: "0"},
+        #     auto_ack=True,
+        #     max_retries=MAX_RETRIES,
+        # ) as pending_stream_entries:
+        #     # Process pending entries
+        #     if pending_stream_entries:
+        #         for stream_name, messages in pending_stream_entries:
+        #             for message in messages:
+        #                 await self._handle_message(message)
 
         # subscribe to the elevator requests channel
         while self._running:
             try:
                 # Block up to 1 second for new, unseen entries
-                async with redis_xreadgroup_with_ack(
-                    self.redis_client,
-                    group_name=SCHEDULER_GROUP,
-                    consumer_name=self.consumer_id,
-                    streams={ELEVATOR_REQUESTS_STREAM: ">"},
-                    auto_ack=True,
-                    max_retries=MAX_RETRIES,
-                ) as stream_entries:
-                    if not stream_entries:
-                        self.logger.debug("No new stream entries")
-                        continue
-                    for stream, messages in stream_entries:
-                        for message in messages:
-                            await self._handle_message(message)
+                # async with redis_xreadgroup_with_ack(
+                #     self.redis_client,
+                #     group_name=SCHEDULER_GROUP,
+                #     consumer_name=self.consumer_id,
+                #     streams={ELEVATOR_REQUESTS_STREAM: ">"},
+                #     auto_ack=True,
+                #     max_retries=MAX_RETRIES,
+                # ) as stream_entries:
+                #     if not stream_entries:
+                #         self.logger.debug("No new stream entries")
+                #         continue
+                #     for stream, messages in stream_entries:
+                #         for message in messages:
+                #             await self._handle_message(message)
+                stream_entries = self.event_stream.read_group(
+                    stream=ELEVATOR_REQUESTS_STREAM,
+                    group=SCHEDULER_GROUP,
+                    consumer=self.consumer_id
+                )
+                if not stream_entries:
+                    self.logger.debug("No new stream entries")
+                    continue
+                for message in stream_entries:
+                    await self._handle_message(message)
+                    self.event_stream.acknowledge(
+                    stream=ELEVATOR_REQUESTS_STREAM,
+                    group=SCHEDULER_GROUP,
+                    message_ids=[message.id]
+                )
+
             except Exception:
                 self.logger.error("Error in scheduler loop", exc_info=True)
                 await asyncio.sleep(1)

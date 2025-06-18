@@ -11,9 +11,9 @@ services:
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: redis-server /usr/local/etc/redis/redis.conf
     profiles:
-      - single
-    networks:
-      - redis-cluster-net
+      - develop
+    # networks:
+    #   - redis-cluster-net
 
   # Redis cluster nodes (for production)
   redis-cluster:
@@ -24,7 +24,7 @@ services:
       - redis-cluster-data:/data
     command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
     profiles:
-      - cluster
+      - production
     deploy:
       replicas: 6 # 3 masters + 3 replicas
     ports:
@@ -52,7 +52,7 @@ services:
           --cluster-replicas 1
           --cluster-yes"
     profiles:
-      - cluster
+      - production
 
   webapp:
     build:
@@ -69,8 +69,10 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+    profiles:
+      - production
+    # networks:
+    #   - redis-cluster-net
 
   scheduler:
     build:
@@ -85,8 +87,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+    # networks:
+    #   - redis-cluster-net
 
   controller:
     build:
@@ -101,8 +103,8 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+    # networks:
+    #   - redis-cluster-net
 
 volumes:
   redis-data:
