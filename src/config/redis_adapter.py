@@ -49,7 +49,7 @@ class RedisAdapter:
     supporting both single instance and cluster deployments.
     """
     def __init__(self,
-                 host: str = "localhost",
+                 host: str = "redis",
                  port: int = 6379,
                  password: Optional[str] = None,
                  cluster_mode: bool = False,

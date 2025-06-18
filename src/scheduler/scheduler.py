@@ -11,6 +11,8 @@ from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
                       ELEVATOR_STATUS, NUM_ELEVATORS, get_redis_client)
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
+from ..libs.messaging.event_stream import RedisStreamClient
+
 
 SCHEDULER_GROUP = "scheduler-group"
 
@@ -151,6 +153,7 @@ class Scheduler:
     async def start(self) -> None:
         self._running = True
         self.redis_client = await get_redis_client()
+        event_stream = RedisStreamClient(self.redis_client)
 
         # Ensure consumer group exists
         try:
