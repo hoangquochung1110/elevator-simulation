@@ -3,9 +3,9 @@ Redis adapter module that provides a unified interface for both single instance
 and cluster Redis deployments.
 """
 import asyncio
-import os
 from functools import wraps
-from typing import Any, Callable, Concatenate, Optional, ParamSpec, TypeVar
+from typing import (Any, Callable, Concatenate, Dict, Optional, ParamSpec,
+                    TypeVar)
 
 import structlog
 from redis.asyncio import Redis, RedisCluster
@@ -49,11 +49,11 @@ class RedisAdapter:
     supporting both single instance and cluster deployments.
     """
     def __init__(self,
-                 host: str = "localhost",
+                 host: str = "redis",
                  port: int = 6379,
                  password: Optional[str] = None,
                  cluster_mode: bool = False,
-                 **kwargs):
+                 **kwargs) -> None:
         """
         Initialize Redis client with support for both single instance and cluster.
 
@@ -65,11 +65,26 @@ class RedisAdapter:
             **kwargs: Additional Redis client arguments
         """
         self.cluster_mode = cluster_mode
-        self.client = None
+        self.client: Optional[Redis | RedisCluster] = None
         self.host = host
         self.port = port
         self.password = password
         self.kwargs = kwargs
+        self._is_connected = False
+
+    async def __aenter__(self) -> 'RedisAdapter':
+        """Async context manager entry."""
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit."""
+        await self.close()
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if the client is connected."""
+        return self._is_connected
 
     async def initialize(self) -> None:
         """Initialize the Redis client based on configuration."""
@@ -94,6 +109,7 @@ class RedisAdapter:
                 )
             # Test connection
             await self.client.ping()
+            self._is_connected = True
             logger.info(
                 "redis_client_initialized",
                 mode="cluster" if self.cluster_mode else "single",
@@ -101,6 +117,7 @@ class RedisAdapter:
                 port=self.port
             )
         except Exception as e:
+            self._is_connected = False
             logger.error(
                 "redis_client_initialization_failed",
                 error=str(e),
@@ -110,13 +127,23 @@ class RedisAdapter:
             raise
 
     @with_retry(retries=3)
-    async def publish(self, channel: str, message: str) -> int:
-        """Publish a message to a channel with retry logic."""
-        return await self.client.publish(channel, message)
+    async def ping(self) -> bool:
+        """Check connection health."""
+        try:
+            await self.client.ping()
+            return True
+        except Exception:
+            self._is_connected = False
+            return False
 
     @with_retry(retries=3)
-    async def xadd(self, stream: str, fields: dict, **kwargs) -> str:
-        """Add a message to a stream with retry logic."""
+    async def xadd(self, stream: str, fields: Dict[str, Any], **kwargs) -> str:
+        """
+        Add a message to a stream with retry logic.
+
+        Returns:
+            str: The ID of the added message
+        """
         return await self.client.xadd(stream, fields, **kwargs)
 
     @with_retry(retries=3)
@@ -144,11 +171,9 @@ class RedisAdapter:
         """Set a key-value pair with retry logic."""
         return await self.client.set(key, value, **kwargs)
 
-    async def pubsub(self) -> Any:
-        """Get a pubsub interface."""
-        return self.client.pubsub()
-
     async def close(self) -> None:
         """Close the Redis client connection."""
         if self.client:
             await self.client.close()
+            self._is_connected = False
+            self.client = None

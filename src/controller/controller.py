@@ -8,11 +8,13 @@ according to the patterns defined in the architecture document.
 
 import asyncio
 import json
+from typing import Dict, Optional
 
 import structlog
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS,
                       get_redis_client)
+from ..libs.messaging.pubsub import PubSubProvider, create_pubsub_client
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
@@ -37,7 +39,7 @@ class ElevatorController:
         """
         self.elevator = Elevator(elevator_id=elevator_id, initial_floor=initial_floor)
         self.redis_client = None
-        self.pubsub = None
+        self.pubsub_client = None
         # Set up subscriber for command channel
         self.command_channel = ELEVATOR_COMMANDS.format(elevator_id)
         self.status_channel = ELEVATOR_STATUS.format(elevator_id)
@@ -54,30 +56,29 @@ class ElevatorController:
         """
         self._running = True
         self.redis_client = await get_redis_client()
-        self.pubsub = self.redis_client.pubsub()
-        # subscribe to the elevator requests channel
-        self.redis_client = await get_redis_client()
-        self.pubsub = self.redis_client.pubsub()
-        await self.pubsub.subscribe(self.command_channel)
+
+        # Initialize PubSub client
+        self.pubsub_client = await create_pubsub_client(
+            PubSubProvider.REDIS,
+        )
 
         # Load initial elevator states
         await self._load_elevator_state()
 
-        try:
-            async for msg in self.pubsub.listen():
-                if not self._running:
-                    break
-                await self._handle_command(msg)
-        finally:
-            await self.stop()
+        # Set up command handler and start listening
+        async def handle_command(message: Dict) -> None:
+            if self._running:
+                await self._handle_command(message)
+
+        await self.pubsub_client.subscribe(self.command_channel, handle_command)
+        await self.pubsub_client.listen()
 
     async def stop(self) -> None:
         """Stop the elevator service."""
         self._running = False
-        # unsubscribe from all channels and patterns, then close pubsub
-        await self.pubsub.unsubscribe()
-        await self.pubsub.punsubscribe()
-        await self.pubsub.close()
+
+        if self.pubsub_client:
+            await self.pubsub_client.close()
 
         if self._movement_task:
             self._movement_task.cancel()
@@ -88,12 +89,12 @@ class ElevatorController:
 
         self.logger.info("service_stopped", elevator_id=self.elevator.id)
 
-    async def _handle_command(self, message) -> None:
+    async def _handle_command(self, message: Dict) -> None:
         """
-        Handle an incoming command message from Redis.
+        Handle an incoming command message.
 
         Args:
-            message: The Redis pub/sub message
+            message: The parsed message data
         """
         # Skip subscribe/unsubscribe messages
         if message["type"] != "message":
@@ -223,7 +224,7 @@ class ElevatorController:
             self._movement_task = asyncio.create_task(self._process_movement())
 
     async def _publish_status(self):
-        """Publish the current elevator status to Redis."""
+        """Publish the current elevator status."""
         # Format status for publishing
         try:
             # Try to get current loop time, fall back to time.time() if loop closed
@@ -231,7 +232,6 @@ class ElevatorController:
         except RuntimeError:
             # Event loop might be closed in test environment
             import time
-
             loop_time = time.time()
 
         status = {
@@ -243,8 +243,8 @@ class ElevatorController:
             "destinations": self.elevator.destinations,
         }
 
-        # Publish to status channel
-        await self.redis_client.publish(self.status_channel, json.dumps(status))
+        # Publish to status channel using our PubSub client
+        await self.pubsub_client.publish(self.status_channel, status)
 
     async def _persist_state(self):
         await self.redis_client.set(

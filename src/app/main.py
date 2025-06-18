@@ -14,6 +14,10 @@ from redis.asyncio import Redis
 
 from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
                       NUM_FLOORS, configure_logging, get_redis_client)
+from ..libs.messaging.event_stream import (EventStreamClient, StreamProvider,
+                                           create_stream_client)
+from ..libs.messaging.pubsub import (PubSubClient, PubSubProvider,
+                                     create_pubsub_client)
 
 
 # --- Redis dependency ---
@@ -26,6 +30,25 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         # No need to close since we're using a singleton pattern in config
         pass
 
+async def get_event_stream() -> AsyncGenerator[EventStreamClient, None]:
+    """FastAPI dependency that yields an event stream client."""
+
+    client = await create_stream_client(provider=StreamProvider.REDIS)
+    try:
+        yield client
+    finally:
+        # No need to close since we're using a singleton pattern in config
+        pass
+
+async def get_pubsub() -> AsyncGenerator[EventStreamClient, None]:
+    """FastAPI dependency that yields a pubsub client."""
+
+    client = await create_pubsub_client(provider=StreamProvider.REDIS)
+    try:
+        yield client
+    finally:
+        # No need to close since we're using a singleton pattern in config
+        pass
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
@@ -104,7 +127,7 @@ async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dic
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(
     req: InternalRequestModel,
-    redis: Redis = Depends(get_redis)
+    event_stream: EventStreamClient = Depends(get_event_stream)
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -116,14 +139,15 @@ async def create_internal_request(
             "status": "pending",
         }
     )
-    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
+
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
 async def create_external_request(
     req: ExternalRequestModel,
-    redis: Redis = Depends(get_redis)
+    event_stream: EventStreamClient = Depends(get_event_stream)
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -135,9 +159,8 @@ async def create_external_request(
             "status": "pending",
         }
     )
-
     # Streams should accept Python dict
-    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 

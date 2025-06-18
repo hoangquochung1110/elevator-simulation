@@ -9,7 +9,7 @@ from fakeredis.aioredis import FakeRedis
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from src.app.main import app, get_redis
+from src.app.main import app, get_redis, get_event_stream, get_pubsub
 from src.config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS,
                         NUM_ELEVATORS, get_redis_client)
 
@@ -34,9 +34,23 @@ async def redis_client():
     redis_client = FakeAsyncRedis(decode_responses=True)
     return redis_client
 
+@pytest_asyncio.fixture
+async def event_stream():
+    """Create a FakeRedis client for testing (the same one the app uses)."""
+    from fakeredis import FakeAsyncRedis
+    redis_client = FakeAsyncRedis(decode_responses=True)
+    yield redis_client
+
+
+@pytest_asyncio.fixture
+async def pubsub():
+    """Create a FakeRedis client for testing (the same one the app uses)."""
+    from fakeredis import FakeAsyncRedis
+    redis_client = FakeAsyncRedis(decode_responses=True)
+    yield redis_client
 
 @pytest_asyncio.fixture(autouse=True)
-async def app_dependencies(redis_client):
+async def app_dependencies(redis_client, event_stream, pubsub):
     """
     General purpose fixture for managing FastAPI dependency overrides.
     This fixture can be used to override any dependency in the FastAPI app.
@@ -53,6 +67,8 @@ async def app_dependencies(redis_client):
 
     try:
         app.dependency_overrides[get_redis] = lambda: redis_client
+        app.dependency_overrides[get_event_stream] = lambda: event_stream
+        app.dependency_overrides[get_pubsub] = lambda: pubsub
     except KeyError:
         pass
     else:

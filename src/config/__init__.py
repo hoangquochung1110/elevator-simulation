@@ -70,7 +70,7 @@ async def get_redis_client():
         cluster_mode = os.getenv("REDIS_CLUSTER_MODE", "false").lower() == "true"
 
         _redis_adapter = RedisAdapter(
-            host=os.getenv("REDIS_HOST", "localhost"),
+            host=os.getenv("REDIS_HOST", "redis"),
             port=int(os.getenv("REDIS_PORT", 6379)),
             password=os.getenv("REDIS_PASSWORD"),
             cluster_mode=cluster_mode
