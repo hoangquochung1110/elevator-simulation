@@ -15,29 +15,36 @@ async def create_redis_stream(
     port: int = 6379,
     password: Optional[str] = None,
     cluster_mode: bool = False,
+    redis_client=None,
     **kwargs
 ):
     """
     Create a Redis Stream client with the given configuration.
-    Example:
-        # Simple usage with defaults
-        stream = await create_redis_stream()
-        # Custom configuration
-        stream = await create_redis_stream(
-            host="redis.example.com",
-            port=6380,
-            password="secret"
-        )
+    
+    Args:
+        host: Redis host (ignored if redis_client is provided)
+        port: Redis port (ignored if redis_client is provided)
+        password: Redis password (ignored if redis_client is provided)
+        cluster_mode: Whether to use cluster mode (ignored if redis_client is provided)
+        redis_client: Existing Redis client to use (recommended)
+        **kwargs: Additional Redis client arguments (ignored if redis_client is provided)
+        
+    Returns:
+        RedisStreamClient instance
     """
-    redis_adapter = RedisAdapter(
-        host=host,
-        port=port,
-        password=password,
-        cluster_mode=cluster_mode,
-        **kwargs
-    )
-    await redis_adapter.initialize()
-    return RedisStreamClient(redis_adapter.client)
+    if redis_client is None:
+        # Only create a new Redis client if one wasn't provided
+        redis_adapter = RedisAdapter(
+            host=host,
+            port=port,
+            password=password,
+            cluster_mode=cluster_mode,
+            **kwargs
+        )
+        await redis_adapter.initialize()
+        redis_client = redis_adapter.client
+        
+    return RedisStreamClient(redis_client)
 
 
 class RedisStreamClient(EventStreamClient):

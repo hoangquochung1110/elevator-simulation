@@ -52,7 +52,9 @@ class RedisAdapter:
                  host: str = "redis",
                  port: int = 6379,
                  password: Optional[str] = None,
+                 db: int = 0,
                  cluster_mode: bool = False,
+                 decode_responses: bool = True,
                  **kwargs):
         """
         Initialize Redis client with support for both single instance and cluster.
@@ -61,92 +63,108 @@ class RedisAdapter:
             host: Redis host or list of cluster nodes
             port: Redis port
             password: Redis password
+            db: Redis database number
             cluster_mode: Whether to use cluster mode
+            decode_responses: Whether to decode responses to strings
             **kwargs: Additional Redis client arguments
         """
         self.cluster_mode = cluster_mode
         self.client = None
         self.host = host
         self.port = port
+        self.db = db
         self.password = password
+        self.decode_responses = decode_responses
         self.kwargs = kwargs
+        self.logger = structlog.get_logger(__name__)
 
-    async def initialize(self) -> None:
-        """Initialize the Redis client based on configuration."""
+    async def _create_single_client(self):
+        """Create a single Redis client instance."""
+        return Redis(
+            host=self.host,
+            port=self.port,
+            db=self.db,
+            password=self.password,
+            decode_responses=self.decode_responses,
+            **self.kwargs
+        )
+
+    async def _create_cluster_client(self):
+        """Create a Redis cluster client instance."""
+        nodes = [{"host": self.host, "port": self.port}]
+        return RedisCluster(
+            startup_nodes=nodes,
+            password=self.password,
+            decode_responses=self.decode_responses,
+            retry=Retry(max_attempts=3),
+            **self.kwargs
+        )
+
+    async def initialize(self):
+        """Initialize the Redis client connection."""
         try:
             if self.cluster_mode:
-                # For cluster mode, we need a list of nodes
-                nodes = [{"host": self.host, "port": self.port}]
-                self.client = RedisCluster(
-                    startup_nodes=nodes,
-                    password=self.password,
-                    decode_responses=True,
-                    retry=Retry(max_attempts=3),
-                    **self.kwargs
-                )
+                self.client = await self._create_cluster_client()
             else:
-                self.client = Redis(
-                    host=self.host,
-                    port=self.port,
-                    password=self.password,
-                    decode_responses=True,
-                    **self.kwargs
-                )
+                self.client = await self._create_single_client()
+
             # Test connection
             await self.client.ping()
-            logger.info(
+
+            # Log successful initialization
+            self.logger.info(
                 "redis_client_initialized",
                 mode="cluster" if self.cluster_mode else "single",
                 host=self.host,
-                port=self.port
+                port=self.port,
+                db=getattr(self, 'db', 0)
             )
+
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 "redis_client_initialization_failed",
                 error=str(e),
                 mode="cluster" if self.cluster_mode else "single",
+                host=self.host,
+                port=self.port,
+                db=getattr(self, 'db', 0),
                 exc_info=True
             )
             raise
 
-    @with_retry(retries=3)
-    async def publish(self, channel: str, message: str) -> int:
-        """Publish a message to a channel with retry logic."""
-        return await self.client.publish(channel, message)
+    # @with_retry(retries=3)
+    # async def publish(self, channel: str, message: str) -> int:
+    #     """Publish a message to a channel with retry logic.
 
-    @with_retry(retries=3)
-    async def xadd(self, stream: str, fields: dict, **kwargs) -> str:
-        """Add a message to a stream with retry logic."""
-        return await self.client.xadd(stream, fields, **kwargs)
+    #     Args:
+    #         channel: Name of the channel to publish to
+    #         message: Message to publish
 
-    @with_retry(retries=3)
-    async def xreadgroup(self, **kwargs) -> list:
-        """Read from a stream within a consumer group with retry logic."""
-        return await self.client.xreadgroup(**kwargs)
+    #     Returns:
+    #         Number of clients that received the message
+    #     """
+    #     return await self.client.publish(channel, message)
 
-    @with_retry(retries=3)
-    async def xgroup_create(self, stream: str, group: str, **kwargs) -> bool:
-        """Create a consumer group with retry logic."""
-        try:
-            return await self.client.xgroup_create(stream, group, **kwargs)
-        except RedisError as e:
-            if "BUSYGROUP" not in str(e):
-                raise
-            return False
+    # @with_retry(retries=3)
+    # async def xadd(self, stream: str, fields: dict, **kwargs) -> str:
+    #     """Add a message to a stream with retry logic."""
+    #     return await self.client.xadd(stream, fields, **kwargs)
 
-    @with_retry(retries=3)
-    async def get(self, key: str) -> Optional[str]:
-        """Get a value by key with retry logic."""
-        return await self.client.get(key)
+    # @with_retry(retries=3)
+    # async def xreadgroup(self, **kwargs) -> list:
+    #     """Read from a stream within a consumer group with retry logic."""
+    #     return await self.client.xreadgroup(**kwargs)
 
-    @with_retry(retries=3)
-    async def set(self, key: str, value: str, **kwargs) -> bool:
-        """Set a key-value pair with retry logic."""
-        return await self.client.set(key, value, **kwargs)
+    # @with_retry(retries=3)
+    # async def xgroup_create(self, stream: str, group: str, **kwargs) -> bool:
+    #     """Create a consumer group with retry logic."""
+    #     try:
+    #         return await self.client.xgroup_create(stream, group, **kwargs)
+    #     except RedisError as e:
+    #         if "BUSYGROUP" not in str(e):
+    #             raise
+    #         return False
 
-    async def pubsub(self) -> Any:
-        """Get a pubsub interface."""
-        return self.client.pubsub()
 
     async def close(self) -> None:
         """Close the Redis client connection."""
