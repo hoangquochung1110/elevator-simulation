@@ -12,12 +12,8 @@ COPY uv.lock .
 # Install dependencies in a separate layer
 RUN uv pip install --system -e .
 
-# In development, source code will be mounted as a volume
-# Only copying __init__.py as a placeholder for development
-COPY ./src/__init__.py /app/src/
+# Copy the application source code
+COPY ./src /app/src
 
-# Add watchdog for auto-reloading in development
-RUN pip install watchdog[watchmedo]
-
-# Use watchmedo to auto-reload on file changes
-CMD ["watchmedo", "auto-restart", "--directory=/app/src", "--pattern=*.py", "--recursive", "--", "python", "-m", "src.scheduler.main"]
+# Production command
+CMD ["python", "-m", "src.scheduler.main"]

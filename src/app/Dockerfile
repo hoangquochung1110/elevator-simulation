@@ -12,10 +12,10 @@ COPY uv.lock .
 # Install dependencies in a separate layer
 RUN uv pip install --system -e .
 
-# Only copy __init__.py as placeholder, rest will be mounted
-COPY ./src/__init__.py /app/src/
+# Copy the application source code
+COPY ./src /app/src
 
 EXPOSE 8000
 
-# Run with reload flag for development
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src"]
+# Production command
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

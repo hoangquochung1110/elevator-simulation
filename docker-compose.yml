@@ -54,23 +54,24 @@ services:
     profiles:
       - cluster
 
-  # webapp:
-  #   build:
-  #     context: .
-  #     dockerfile: src/app/Dockerfile
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ./src:/app/src
-  #   environment:
-  #     - REDIS_HOST=${REDIS_HOST:-redis}
-  #     - REDIS_PORT=${REDIS_PORT:-6379}
-  #     - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
-  #     - PYTHONUNBUFFERED=1
-  #   depends_on:
-  #     - ${REDIS_SERVICE:-redis}
-  #   networks:
-  #     - redis-cluster-net
+  webapp:
+    build:
+      context: .
+      dockerfile: src/app/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    environment:
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ${REDIS_SERVICE:-redis}
+    networks:
+      - redis-cluster-net
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
 
   scheduler:
     build:
@@ -87,6 +88,7 @@ services:
       - ${REDIS_SERVICE:-redis}
     networks:
       - redis-cluster-net
+    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.scheduler.main
 
   controller:
     build:
@@ -103,6 +105,7 @@ services:
       - ${REDIS_SERVICE:-redis}
     networks:
       - redis-cluster-net
+    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.controller.main
 
 volumes:
   redis-data:
