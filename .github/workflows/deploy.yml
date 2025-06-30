@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Download Image Tag Artifact
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v4
       with:
         workflow: cicd.yml
         name: image-tag
