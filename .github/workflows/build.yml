@@ -1,0 +1,60 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY_WEBAPP: redis-pubsub-101/webapp
+  ECR_REPOSITORY_CONTROLLER: redis-pubsub-101/controller
+  ECR_REPOSITORY_SCHEDULER: redis-pubsub-101/scheduler
+
+jobs:
+  build:
+    name: Build and Push Images to AWS ECR
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push images to Amazon ECR
+      id: build-images
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build and push each image with the unique Git SHA tag
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_WEBAPP:$IMAGE_TAG -f src/app/Dockerfile .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_WEBAPP:$IMAGE_TAG
+
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_CONTROLLER:$IMAGE_TAG -f src/controller/Dockerfile .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_CONTROLLER:$IMAGE_TAG
+
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_SCHEDULER:$IMAGE_TAG -f src/scheduler/Dockerfile .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_SCHEDULER:$IMAGE_TAG
+
+    - name: Save Image Tag
+      run: |
+        mkdir -p artifacts
+        echo ${{ github.sha }} > artifacts/image_tag.txt
+
+    - name: Upload Image Tag Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: image-tag
+        path: artifacts/image_tag.txt

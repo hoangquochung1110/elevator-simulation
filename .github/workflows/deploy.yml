@@ -1,0 +1,58 @@
+name: Manual Deploy to ECS
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Download Image Tag Artifact
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: cicd.yml
+        name: image-tag
+        path: .
+        branch: main
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Read Image Tag
+      id: image_tag
+      run: echo "tag=$(cat image_tag.txt)" >> $GITHUB_OUTPUT
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.2.0 # Or your desired version
+
+    - name: Terraform Init
+      run: |
+        terraform -chdir=infra/environments/develop init \
+          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+          -backend-config="key=redis-pubsub-101.tfstate" \
+          -backend-config="region=${{ env.AWS_REGION }}"
+
+    - name: Terraform Apply
+      env:
+        IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
+      run: |
+        terraform -chdir=infra/environments/develop apply -auto-approve \
+          -var="webapp_image_tag=$IMAGE_TAG" \
+          -var="controller_image_tag=$IMAGE_TAG" \
+          -var="scheduler_image_tag=$IMAGE_TAG"
