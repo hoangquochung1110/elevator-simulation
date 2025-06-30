@@ -68,7 +68,7 @@ def configure_logging():
 
 class RedisClientManager:
     """Manages Redis client lifecycle and configuration.
-    
+
     This class handles the singleton pattern for Redis client instances,
     configuration management, and proper cleanup.
     """
@@ -76,37 +76,37 @@ class RedisClientManager:
     _lock = asyncio.Lock()
     _client = None
     _testing = False
-    
+
     @classmethod
     def set_testing_mode(cls, enabled: bool = True) -> None:
         """Enable or disable testing mode.
-        
+
         When testing mode is enabled, a FakeRedis instance will be used.
-        
+
         Args:
             enabled: Whether to enable testing mode
         """
         cls._testing = enabled
-    
+
     @classmethod
     async def get_client(cls) -> 'RedisAdapter.client':
         """Get the Redis client instance, initializing if needed.
-        
+
         This method is thread-safe and ensures only one Redis client is created.
-        
+
         Returns:
             The Redis client instance (Redis, RedisCluster, or FakeRedis)
-            
+
         Raises:
             RuntimeError: If Redis client initialization fails
         """
         if cls._client is not None:
             return cls._client
-            
+
         async with cls._lock:
             if cls._client is not None:
                 return cls._client
-                
+
             try:
                 if cls._testing or os.getenv("TESTING") == "True":
                     from fakeredis.aioredis import FakeRedis
@@ -124,7 +124,7 @@ class RedisClientManager:
                     exc_info=True
                 )
                 raise RuntimeError("Failed to initialize Redis client") from e
-    
+
     @classmethod
     def _create_adapter(cls) -> 'RedisAdapter':
         """Create a RedisAdapter instance with current configuration."""
@@ -136,7 +136,7 @@ class RedisClientManager:
             cluster_mode=os.getenv('REDIS_CLUSTER_MODE', 'false').lower() == 'true',
             decode_responses=True
         )
-    
+
     @classmethod
     async def close(cls) -> None:
         """Close the Redis client connection if it exists."""
@@ -144,7 +144,7 @@ class RedisClientManager:
             await cls._client.close()
             cls._client = None
             logger.debug("Redis client connection closed")
-    
+
     @classmethod
     async def reset(cls) -> None:
         """Reset the client manager (for testing purposes)."""
