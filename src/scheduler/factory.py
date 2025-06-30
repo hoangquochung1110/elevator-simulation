@@ -1,15 +1,20 @@
 """Factory for creating and configuring Scheduler instances with dependency injection support."""
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+import structlog
+from redis.asyncio import Redis as RedisClient
 
 from ..config import get_redis_client
-from ..libs.messaging.event_stream import create_event_stream, EventStreamClient
-from ..libs.messaging.pubsub import create_pubsub_client, PubSubClient
+from ..libs.messaging.event_stream import (EventStreamClient,
+                                           create_event_stream)
+from ..libs.messaging.pubsub import PubSubClient, create_pubsub_client
 from .scheduler import Scheduler
-from redis.asyncio import Redis as RedisClient
+
+logger = structlog.get_logger(__name__)
 
 class Dependencies:
     """Container for service dependencies with lazy initialization."""
-    
+
     def __init__(
         self,
         *,
@@ -25,10 +30,10 @@ class Dependencies:
 
     async def get_redis(self) -> RedisClient:
         """Get or create Redis client.
-        
+
         Returns:
             The Redis client instance
-            
+
         Raises:
             RuntimeError: If Redis client initialization fails
         """
@@ -72,20 +77,20 @@ async def create_scheduler(
     dependencies: Optional[Dependencies] = None
 ) -> Scheduler:
     """Create and configure a Scheduler instance with its dependencies.
-    
+
     Args:
         config: Configuration dictionary containing:
             - scheduler_id: Unique ID for the scheduler
             - pubsub_config: Configuration for PubSub client
             - event_stream_config: Configuration for EventStream client
         dependencies: Optional Dependencies instance for testing
-        
+
     Returns:
         Configured Scheduler instance
     """
     deps = dependencies or _dependencies
     deps.config = config  # Update config if provided
-    
+
     return Scheduler(
         id=str(config['scheduler_id']),
         redis_client=await deps.get_redis(),
