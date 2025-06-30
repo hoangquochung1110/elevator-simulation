@@ -14,6 +14,8 @@ from redis.asyncio import Redis
 
 from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
                       NUM_FLOORS, configure_logging, get_redis_client)
+from ..libs.messaging.event_stream import (EventStreamClient,
+                                           create_event_stream)
 
 
 # --- Redis dependency ---
@@ -24,6 +26,13 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         yield client
     finally:
         # No need to close since we're using a singleton pattern in config
+        pass
+
+async def get_event_stream() -> AsyncGenerator[EventStreamClient, None]:
+    client = await create_event_stream()
+    try:
+        yield client
+    finally:
         pass
 
 
@@ -48,7 +57,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Redis Pub/Sub API", lifespan=lifespan)
+app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="src/app/static"), name="static")
 templates = Jinja2Templates(directory="src/app/templates")
 
@@ -104,7 +113,7 @@ async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dic
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(
     req: InternalRequestModel,
-    redis: Redis = Depends(get_redis)
+    event_stream = Depends(get_event_stream),
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -116,14 +125,15 @@ async def create_internal_request(
             "status": "pending",
         }
     )
-    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    # await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
 async def create_external_request(
     req: ExternalRequestModel,
-    redis: Redis = Depends(get_redis)
+    event_stream = Depends(get_event_stream),
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -137,7 +147,7 @@ async def create_external_request(
     )
 
     # Streams should accept Python dict
-    await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
+    await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
@@ -147,9 +157,11 @@ async def get_elevators(redis: Redis = Depends(get_redis)):
 
 
 @app.get("/api/requests", status_code=200)
-async def get_stream_requests(redis: Redis = Depends(get_redis)):
+async def get_stream_requests(
+    event_stream = Depends(get_event_stream),
+):
     """Retrieve all entries from the elevator requests stream"""
-    entries = await redis.xrange(ELEVATOR_REQUESTS_STREAM, "-", "+")
+    entries = await event_stream.range(ELEVATOR_REQUESTS_STREAM, "-", "+")
     requests = []
     for msg_id, fields in entries:
         # include message ID with each entry
@@ -164,7 +176,7 @@ async def trim_stream(
     min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
     maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
-    redis: Redis = Depends(get_redis)
+    event_stream = Depends(get_event_stream),
 ):
     """
     Trim the elevator requests stream using XTRIM.
@@ -175,14 +187,14 @@ async def trim_stream(
         raise HTTPException(status_code=400, detail="Provide exactly one of min_id or maxlen")
     # Trim by count
     if maxlen is not None:
-        trimmed_count = await redis.xtrim(
+        trimmed_count = await event_stream.trim(
             ELEVATOR_REQUESTS_STREAM,
             maxlen=maxlen,
             approximate=approximate,
         )
     else:
         # Trim by ID
-        trimmed_count = await redis.xtrim(
+        trimmed_count = await event_stream.trim(
             ELEVATOR_REQUESTS_STREAM,
             minid=min_id,
             approximate=approximate,

@@ -5,10 +5,13 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 import structlog
-from redis.exceptions import ConnectionError, RedisError
+from redis.asyncio import Redis
+from redis.exceptions import ConnectionError
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
-                      ELEVATOR_STATUS, NUM_ELEVATORS, get_redis_client)
+                      ELEVATOR_STATUS, NUM_ELEVATORS)
+from ..libs.messaging.event_stream import EventStreamClient
+from ..libs.messaging.pubsub import PubSubClient
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
 
@@ -22,6 +25,125 @@ async def _exponential_backoff(attempt: int, max_delay: int = 32) -> None:
     """Calculate exponential backoff delay with jitter."""
     delay = min(max_delay, (2 ** attempt) + (random.random() * 0.1))
     await asyncio.sleep(delay)
+
+@asynccontextmanager
+async def readgroup_with_ack(
+    event_stream,
+    stream,
+    group,
+    consumer,
+    last_id,
+    auto_ack,
+    max_retries=3
+):
+    """Asynchronous context manager for reading and acknowledging messages from a stream consumer group.
+
+    This function handles reading messages from a distributed stream with built-in retry logic
+    for connection errors and optional automatic message acknowledgment.
+
+    Args:
+        event_stream: The stream client instance used for reading and acknowledging messages.
+        stream (str): Name of the stream to read from.
+        group (str): Name of the consumer group.
+        consumer (str): Name of the consumer within the group.
+        last_id (str): The ID from which to start reading messages. Use '>' to get new messages.
+        auto_ack (bool): If True, automatically acknowledge messages after they are successfully processed.
+        max_retries (int, optional): Maximum number of retry attempts for connection errors. Defaults to 3.
+
+    Yields:
+        list: A list of tuples containing stream entries in the format (stream_name, [(entry_id, fields_dict), ...]).
+
+    Raises:
+        ConnectionError: If maximum retry attempts are exceeded for connection errors.
+        Exception: Any other unexpected exceptions that occur during stream processing.
+
+    Note:
+        - The function implements exponential backoff between retry attempts.
+        - When auto_ack is True, messages are only acknowledged if no exceptions occur during processing.
+        - Connection errors are automatically retried up to max_retries times.
+        - The function assumes the underlying stream supports consumer groups and message acknowledgment.
+    """
+    entries_to_ack = []
+    attempt = 0
+
+    while True:
+        try:
+            stream_data = await event_stream.read_group(
+                stream=stream,
+                group=group,
+                consumer=consumer,
+                last_id=last_id,
+            )
+            # Collect entries for acknowledgment
+            for stream_name, stream_entries in stream_data:
+                for entry_id, fields in stream_entries:
+                    entries_to_ack.append((stream_name, entry_id))
+            # Yield in original format
+            yield stream_data
+
+            # Auto-acknowledge all entries if enabled and no exception occurred
+            if auto_ack and entries_to_ack:
+                try:
+                    # Group entries by stream for efficient acking
+                    streams_to_ack = {}
+                    for stream_name, entry_id in entries_to_ack:
+                        if stream_name not in streams_to_ack:
+                            streams_to_ack[stream_name] = []
+                        streams_to_ack[stream_name].append(entry_id)
+
+                    # Acknowledge entries for each stream
+                    for stream_name, entry_ids in streams_to_ack.items():
+                        await event_stream.acknowledge(
+                            stream,
+                            group,
+                            *entry_ids
+                        )
+                except Exception as e:
+                    logger.error(
+                        "Failed to acknowledge messages",
+                        error=str(e),
+                        stream_name=stream,
+                        group_name=group,
+                        entries=entry_ids,
+                        exc_info=True
+                    )
+                    raise
+
+            # If we get here, everything worked, so break the retry loop
+            break
+
+        except ConnectionError as e:
+            # Handle transient connection errors with retry logic
+            attempt += 1
+            if attempt >= max_retries:
+                logger.error(
+                    "Max retries exceeded for Redis operation",
+                    error=str(e),
+                    attempt=attempt,
+                    exc_info=True
+                )
+                raise
+
+            logger.warning(
+                "Redis connection error, retrying",
+                error=str(e),
+                attempt=attempt,
+                max_retries=max_retries
+            )
+            await _exponential_backoff(attempt)
+
+        except Exception as e:
+            # Log any other exceptions before re-raising
+            logger.error(
+                "Unexpected error in redis_xreadgroup_with_ack",
+                error=str(e),
+                error_type=type(e).__name__,
+                group_name=group,
+                consumer_name=consumer,
+                stream=stream,
+                exc_info=True
+            )
+            raise
 
 @asynccontextmanager
 async def redis_xreadgroup_with_ack(
@@ -139,39 +261,71 @@ class Scheduler:
     1. Listens for new requests on elevator:requests
     """
 
-    def __init__(self, id):
+    def __init__(
+        self,
+        id: str,
+        redis_client: Redis,
+        pubsub: PubSubClient,
+        event_stream: EventStreamClient,
+        config: Optional[Dict] = None
+    ):
+        """Initialize the Scheduler with its dependencies.
+
+        Args:
+            id: Unique identifier for this scheduler instance
+            redis_client: Redis client for key-value operations
+            pubsub: PubSub client for message passing
+            event_stream: Event stream client for stream operations
+            config: Optional configuration dictionary
+        """
         self.id = id
         self.consumer_id = f"scheduler-{id}"
-        self.redis_client = None
+        self.redis_client = redis_client
+        self.pubsub = pubsub
+        self.event_stream = event_stream
+        self.config = config or {}
         self.elevator_states: Dict[int, Elevator] = {}
         self._running: bool = False
         self.logger = logger
-        # Logger handlers and level are configured centrally in application entry-point
+
+    async def create_consumer_group(
+        self,
+        stream,
+        group,
+    ):
+        # Ensure consumer group exists
+        created = await self.event_stream.create_consumer_group(
+            stream,
+            group,
+        )
+        return created
 
     async def start(self) -> None:
-        self._running = True
-        self.redis_client = await get_redis_client()
+        """Start the scheduler service.
 
-        # Ensure consumer group exists
-        try:
-            await self.redis_client.xgroup_create(ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP, mkstream=True)
-        except RedisError as e:
-            if "BUSYGROUP" not in str(e):
-                raise
+        This initializes the consumer group and starts processing requests.
+        """
+        self._running = True
+
+        # Initialize consumer group
+        await self.create_consumer_group(
+            ELEVATOR_REQUESTS_STREAM,
+            SCHEDULER_GROUP
+        )
 
         # Load initial elevator states
         await self._load_elevator_states()
 
         # Claim and process any pending entries for this consumer
-        async with redis_xreadgroup_with_ack(
-            self.redis_client,
-            group_name=SCHEDULER_GROUP,
-            consumer_name=self.consumer_id,
-            streams={ELEVATOR_REQUESTS_STREAM: "0"},
-            auto_ack=True,
-            max_retries=MAX_RETRIES,
+        async with readgroup_with_ack(
+                    event_stream=self.event_stream,
+                    stream=ELEVATOR_REQUESTS_STREAM,
+                    group=SCHEDULER_GROUP,
+                    consumer=self.consumer_id,
+                    last_id="0",
+                    auto_ack= True,
+                    max_retries=3,
         ) as pending_stream_entries:
-            # Process pending entries
             if pending_stream_entries:
                 for stream_name, messages in pending_stream_entries:
                     for message in messages:
@@ -180,14 +334,14 @@ class Scheduler:
         # subscribe to the elevator requests channel
         while self._running:
             try:
-                # Block up to 1 second for new, unseen entries
-                async with redis_xreadgroup_with_ack(
-                    self.redis_client,
-                    group_name=SCHEDULER_GROUP,
-                    consumer_name=self.consumer_id,
-                    streams={ELEVATOR_REQUESTS_STREAM: ">"},
-                    auto_ack=True,
-                    max_retries=MAX_RETRIES,
+                async with readgroup_with_ack(
+                    event_stream=self.event_stream,
+                    stream=ELEVATOR_REQUESTS_STREAM,
+                    group=SCHEDULER_GROUP,
+                    consumer=self.consumer_id,
+                    last_id=">",
+                    auto_ack= True,
+                    max_retries=3,
                 ) as stream_entries:
                     if not stream_entries:
                         self.logger.debug("No new stream entries")
@@ -239,7 +393,7 @@ class Scheduler:
                 "request_id": request.id,
             }
             # publish command to a channel
-            await self.redis_client.publish(
+            await self.pubsub.publish(
                 ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command)
             )
             self.logger.info(
@@ -265,7 +419,7 @@ class Scheduler:
             "request_id": request.id,
         }
         # publish command to a channel
-        await self.redis_client.publish(
+        await self.pubsub.publish(
             ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)
         )
         self.logger.info(

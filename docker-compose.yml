@@ -71,6 +71,7 @@ services:
       - ${REDIS_SERVICE:-redis}
     networks:
       - redis-cluster-net
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
 
   scheduler:
     build:
@@ -87,6 +88,7 @@ services:
       - ${REDIS_SERVICE:-redis}
     networks:
       - redis-cluster-net
+    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.scheduler.main
 
   controller:
     build:
@@ -103,6 +105,7 @@ services:
       - ${REDIS_SERVICE:-redis}
     networks:
       - redis-cluster-net
+    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.controller.main
 
 volumes:
   redis-data:

@@ -53,8 +53,6 @@ class ElevatorController:
         This starts the command subscriber and initializes the elevator state.
         """
         self._running = True
-        self.redis_client = await get_redis_client()
-        self.pubsub = self.redis_client.pubsub()
         # subscribe to the elevator requests channel
         self.redis_client = await get_redis_client()
         self.pubsub = self.redis_client.pubsub()
