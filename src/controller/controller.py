@@ -11,8 +11,7 @@ import json
 
 import structlog
 
-from ..config import (ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS,
-                      get_redis_client)
+from ..config import ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
@@ -27,16 +26,17 @@ class ElevatorController:
     4. Manages the elevator's destinations
     """
 
-    def __init__(self, elevator_id: int, initial_floor: int = 1):
+    def __init__(self, elevator_id: int, initial_floor: int = 1, redis_client=None):
         """
         Initialize the elevator service.
 
         Args:
             elevator_id: Unique identifier for this elevator
             initial_floor: The floor where this elevator starts
+            redis_client: Optional Redis client instance to use
         """
         self.elevator = Elevator(elevator_id=elevator_id, initial_floor=initial_floor)
-        self.redis_client = None
+        self.redis_client = redis_client
         self.pubsub = None
         # Set up subscriber for command channel
         self.command_channel = ELEVATOR_COMMANDS.format(elevator_id)
@@ -52,9 +52,10 @@ class ElevatorController:
 
         This starts the command subscriber and initializes the elevator state.
         """
+        if self.redis_client is None:
+            raise ValueError("Redis client must be provided to ElevatorController")
+            
         self._running = True
-        # subscribe to the elevator requests channel
-        self.redis_client = await get_redis_client()
         self.pubsub = self.redis_client.pubsub()
         await self.pubsub.subscribe(self.command_channel)
 

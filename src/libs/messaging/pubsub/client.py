@@ -14,7 +14,6 @@ DEFAULT_CONFIG = {
     "host": os.getenv("REDIS_HOST", "redis"),
     "port": int(os.getenv("REDIS_PORT", "6379")),
     "password": os.getenv("REDIS_PASSWORD"),
-    "cluster_mode": os.getenv("REDIS_CLUSTER_MODE", "false").lower() == "true",
 }
 
 # Module-level client instance

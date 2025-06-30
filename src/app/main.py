@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,37 +14,43 @@ from pydantic import BaseModel, ConfigDict, Field
 from redis.asyncio import Redis
 
 from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
-                      NUM_FLOORS, configure_logging, get_redis_client)
+                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PORT,
+                      configure_logging, get_redis_client)
 from ..libs.messaging.event_stream import (EventStreamClient,
                                            create_event_stream)
 
+load_dotenv()  # take environment variables
 
-# --- Redis dependency ---
-async def get_redis() -> AsyncGenerator[Redis, None]:
-    """FastAPI dependency that yields a Redis client."""
-    client = await get_redis_client()
-    try:
-        yield client
-    finally:
-        # No need to close since we're using a singleton pattern in config
-        pass
 
-async def get_event_stream() -> AsyncGenerator[EventStreamClient, None]:
-    client = await create_event_stream()
-    try:
-        yield client
-    finally:
-        pass
+# --- Dependencies ---
+redis_client = None
 
+def get_redis() -> Redis:
+    """FastAPI dependency that returns the Redis client."""
+    if redis_client is None:
+        raise RuntimeError("Redis client not initialized")
+    return redis_client
+
+async def get_event_stream() -> EventStreamClient:
+    """FastAPI dependency that returns the EventStream client."""
+    return await create_event_stream(redis_client=redis_client)
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging()
-    redis_client = await get_redis_client()
+    global redis_client
 
-    # initialize elevator states in Redis
-    redis_client = await get_redis_client()
+    # Configure logging
+    configure_logging()
+
+    # Initialize Redis client
+    redis_client = await get_redis_client(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+    )
+
+    # Initialize elevator statuses
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
         initial_state = {
@@ -54,7 +61,13 @@ async def lifespan(app: FastAPI):
             "destinations": [],
         }
         await redis_client.set(key, json.dumps(initial_state))
-    yield
+
+    try:
+        yield
+    finally:
+        # Cleanup if needed
+        if redis_client:
+            await redis_client.close()
 
 
 app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
@@ -113,7 +126,7 @@ async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dic
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(
     req: InternalRequestModel,
-    event_stream = Depends(get_event_stream),
+    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -133,7 +146,7 @@ async def create_internal_request(
 @app.post("/api/requests/external", status_code=202)
 async def create_external_request(
     req: ExternalRequestModel,
-    event_stream = Depends(get_event_stream),
+    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     # serialize Pydantic model to JSON string
     request_data = req.model_dump()
@@ -158,7 +171,7 @@ async def get_elevators(redis: Redis = Depends(get_redis)):
 
 @app.get("/api/requests", status_code=200)
 async def get_stream_requests(
-    event_stream = Depends(get_event_stream),
+    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     """Retrieve all entries from the elevator requests stream"""
     entries = await event_stream.range(ELEVATOR_REQUESTS_STREAM, "-", "+")
@@ -176,7 +189,7 @@ async def trim_stream(
     min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
     maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
-    event_stream = Depends(get_event_stream),
+    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     """
     Trim the elevator requests stream using XTRIM.
@@ -205,7 +218,7 @@ async def trim_stream(
 @app.get("/elevator-table", response_class=HTMLResponse)
 async def elevator_table(
     request: Request,
-    redis: Redis = Depends(get_redis)
+    redis: Redis = Depends(get_redis),
 ):
     elevators = await fetch_elevator_statuses(redis)
     return templates.TemplateResponse(
@@ -216,7 +229,7 @@ async def elevator_table(
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request,
-    redis: Redis = Depends(get_redis)
+    redis: Redis = Depends(get_redis),
 ):
     elevators = await fetch_elevator_statuses(redis)
     return templates.TemplateResponse(

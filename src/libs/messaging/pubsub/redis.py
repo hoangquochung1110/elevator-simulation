@@ -9,27 +9,20 @@ from typing import Any, AsyncIterator, Dict, Optional, Union
 from redis.asyncio.client import PubSub as RedisPubSub
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from ....config.redis_adapter import RedisAdapter
+import os
+from ....config import get_redis_client, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
 from .base import PubSubClient
 
 logger = logging.getLogger(__name__)
 
 
 async def create_redis_pubsub(
-    host: str = "redis",
-    port: int = 6379,
-    password: Optional[str] = None,
-    cluster_mode: bool = False,
     redis_client=None,
     **kwargs
 ) -> 'RedisPubSubClient':
     """Create a Redis Pub/Sub client with the given configuration.
 
     Args:
-        host: Redis host or list of cluster nodes (ignored if redis_client is provided).
-        port: Redis port (ignored if redis_client is provided).
-        password: Redis password (ignored if redis_client is provided).
-        cluster_mode: Whether to use cluster mode (ignored if redis_client is provided).
         redis_client: Existing Redis client to use (recommended).
         **kwargs: Additional Redis client arguments (ignored if redis_client is provided).
 
@@ -37,16 +30,12 @@ async def create_redis_pubsub(
         An instance of RedisPubSubClient.
     """
     if redis_client is None:
-        # Only create a new Redis client if one wasn't provided
-        redis_adapter = RedisAdapter(
-            host=host,
-            port=port,
-            password=password,
-            cluster_mode=cluster_mode,
-            **kwargs
+        redis_client = await get_redis_client(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            password=REDIS_PASSWORD
         )
-        await redis_adapter.initialize()
-        redis_client = redis_adapter.client
         
     return RedisPubSubClient(redis_client)
 

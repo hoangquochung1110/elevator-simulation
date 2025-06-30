@@ -35,37 +35,24 @@ def handle_signals():
     signal.signal(signal.SIGTERM, handle_exit)
 
 
-def get_config() -> Dict[str, Any]:
-    """Load configuration from environment variables."""
-    # Set Redis environment variables if not already set
-    os.environ.setdefault('REDIS_HOST', 'localhost')
-    os.environ.setdefault('REDIS_PORT', '6379')
-    os.environ.setdefault('REDIS_DB', '0')
-
-    return {
+async def main():
+    """Main entry point for the Scheduler service."""
+    # Configuration
+    config = {
         'scheduler_id': os.getenv('SCHEDULER_ID', '1'),
-        # Redis config is read from environment variables directly by get_redis_client()
-        'redis_config': {},
         'pubsub_config': {
             'provider': os.getenv('PUBSUB_PROVIDER', 'redis'),
         },
         'event_stream_config': {
-            # Add any event stream specific config here
+            'provider': os.getenv('EVENT_STREAM_PROVIDER', 'redis'),
         }
     }
 
-
-async def main():
-    """Main entry point for the Scheduler service."""
     try:
-        # Load configuration
-        config = get_config()
-
         # Log service startup
         logger.info(
             "scheduler_starting",
             scheduler_id=config['scheduler_id'],
-            **config['redis_config']
         )
 
         # Create and start scheduler

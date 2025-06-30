@@ -13,7 +13,8 @@ import sys
 
 import structlog
 
-from src.config import NUM_ELEVATORS, configure_logging
+from src.config import (NUM_ELEVATORS, REDIS_DB, REDIS_HOST, REDIS_PASSWORD,
+                        REDIS_PORT, configure_logging, get_redis_client)
 from src.controller.controller import \
     ElevatorController  # Assuming you move scheduler.py to this location
 
@@ -36,13 +37,31 @@ def handle_signals():
 
 
 async def main():
-
-    # dynamically create controllers based on config
-    controllers = [ElevatorController(elevator_id=i+1) for i in range(NUM_ELEVATORS)]
-    # start scheduler and all controllers
-    await asyncio.gather(
-        *[c.start() for c in controllers],
+    # Initialize Redis client
+    redis_client = await get_redis_client(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        password=REDIS_PASSWORD
     )
+
+    try:
+        # dynamically create controllers based on config
+        controllers = [
+            ElevatorController(
+                elevator_id=i+1,
+                redis_client=redis_client
+            ) for i in range(NUM_ELEVATORS)
+        ]
+
+        # start all controllers
+        await asyncio.gather(
+            *[c.start() for c in controllers],
+        )
+    finally:
+        # Ensure Redis connection is properly closed
+        if redis_client:
+            await redis_client.close()
 
 if __name__ == "__main__":
     configure_logging()
