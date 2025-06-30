@@ -10,7 +10,7 @@ import asyncio
 import os
 import signal
 import sys
-from typing import Dict, Any
+from typing import Any, Dict
 
 import structlog
 
@@ -41,7 +41,7 @@ def get_config() -> Dict[str, Any]:
     os.environ.setdefault('REDIS_HOST', 'localhost')
     os.environ.setdefault('REDIS_PORT', '6379')
     os.environ.setdefault('REDIS_DB', '0')
-    
+
     return {
         'scheduler_id': os.getenv('SCHEDULER_ID', '1'),
         # Redis config is read from environment variables directly by get_redis_client()
@@ -60,14 +60,14 @@ async def main():
     try:
         # Load configuration
         config = get_config()
-        
+
         # Log service startup
         logger.info(
             "scheduler_starting",
             scheduler_id=config['scheduler_id'],
             **config['redis_config']
         )
-        
+
         # Create and start scheduler
         scheduler = await create_scheduler(config)
         scheduler_task = asyncio.create_task(scheduler.start())
