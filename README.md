@@ -92,3 +92,24 @@ Used for real-time communication between components:
    - There’s no notion of elevator “full,” so calls can be sent to a car even if it’s overloaded.
    - Real controllers track load and may skip further stops when at capacity.
 6. No priority handling
+
+## CI/CD Setup
+
+The CI/CD pipeline, defined in `.github/workflows/cicd.yml`, automates the building, testing, and deployment of this application to AWS ECS.
+
+### Terraform State Bucket
+
+The pipeline uses Terraform to manage infrastructure as code. Terraform needs a remote backend to store its state file, which is crucial for collaboration and running automation. We use an AWS S3 bucket for this purpose.
+
+Before the pipeline can run successfully, you must configure the following secret in your GitHub repository's settings (`Settings > Secrets and variables > Actions`):
+
+-   `TF_STATE_BUCKET`: This secret should contain the name of the S3 bucket that you have created to store the Terraform state file (e.g., `my-cool-project-tfstate`).
+
+### AWS Credentials
+
+For GitHub Actions to authenticate with your AWS account and deploy resources, you must also configure the following secrets:
+
+-   `AWS_ACCESS_KEY_ID`: Your AWS access key ID.
+-   `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
+
+These credentials should belong to an IAM user or role with appropriate permissions to push images to ECR, manage ECS services, and interact with S3 for Terraform state.

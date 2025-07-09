@@ -70,3 +70,11 @@ Thumbs.db
 
 .bruno/
 bruno.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
