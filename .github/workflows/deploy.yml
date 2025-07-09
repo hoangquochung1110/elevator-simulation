@@ -19,7 +19,9 @@ jobs:
     - name: Download Image Tag Artifact
       uses: dawidd6/action-download-artifact@v4
       with:
-        workflow: cicd.yml
+        # Specifies the workflow file
+        # that generated the artifact (in this case, your build workflow).
+        workflow: build.yml
         name: image-tag
         path: .
         branch: main
@@ -39,7 +41,7 @@ jobs:
     - name: Set up Terraform
       uses: hashicorp/setup-terraform@v2
       with:
-        terraform_version: 1.2.0 # Or your desired version
+        terraform_version: 1.9.8 # Or your desired version
 
     - name: Terraform Init
       run: |
