@@ -1,0 +1,9 @@
+region                 = "ap-southeast-1"
+webapp_image_tag     = "latest"
+controller_image_tag = "latest"
+scheduler_image_tag  = "latest"
+
+tags = {
+  Project     = "redis-pubsub-101"
+  Environment = "develop"
+}
