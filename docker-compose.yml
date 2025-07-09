@@ -1,58 +1,12 @@
 version: "3.9"
 
 services:
-  # Redis single node (default for development)
   redis:
     image: redis:7.2-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
-      - ./redis.conf:/usr/local/etc/redis/redis.conf
-    command: redis-server /usr/local/etc/redis/redis.conf
-    profiles:
-      - single
-    networks:
-      - redis-cluster-net
-
-  # Redis cluster nodes (for production)
-  redis-cluster:
-    image: redis:7.2
-    networks:
-      - redis-cluster-net
-    volumes:
-      - redis-cluster-data:/data
-    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
-    profiles:
-      - cluster
-    deploy:
-      replicas: 6 # 3 masters + 3 replicas
     ports:
-      - "6379-6384:6379" # Map each node to a different host port
-      - "16379-16384:16379" # Cluster bus ports
-    environment:
-      - REDIS_CLUSTER_ANNOUNCE_IP=redis-cluster
-
-  redis-cluster-init:
-    image: redis:7.2
-    networks:
-      - redis-cluster-net
-    depends_on:
-      - redis-cluster
-    command: >
-      /bin/sh -c "
-        sleep 10;
-        echo yes | redis-cli --cluster create
-          redis-cluster_1:6379
-          redis-cluster_2:6379
-          redis-cluster_3:6379
-          redis-cluster_4:6379
-          redis-cluster_5:6379
-          redis-cluster_6:6379
-          --cluster-replicas 1
-          --cluster-yes"
-    profiles:
-      - cluster
+      - "6379:6379"
 
   webapp:
     build:
@@ -63,14 +17,11 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
     depends_on:
-      - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+      - redis
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
 
   scheduler:
@@ -80,14 +31,11 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
     depends_on:
-      - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+      - redis
     command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.scheduler.main
 
   controller:
@@ -97,20 +45,12 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
     depends_on:
-      - ${REDIS_SERVICE:-redis}
-    networks:
-      - redis-cluster-net
+      - redis
     command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.controller.main
 
 volumes:
   redis-data:
-  redis-cluster-data:
-
-networks:
-  redis-cluster-net:
-    driver: bridge
