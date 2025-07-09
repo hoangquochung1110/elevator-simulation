@@ -36,7 +36,6 @@ resource "aws_ecs_service" "webapp" {
   enable_ecs_managed_tags            = true
   enable_execute_command             = false
   health_check_grace_period_seconds  = 0
-  iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
   launch_type                        = "FARGATE"
   platform_version                   = "1.4.0"
   propagate_tags                     = "NONE"
@@ -45,12 +44,6 @@ resource "aws_ecs_service" "webapp" {
   tags_all                           = {}
   task_definition                    = aws_ecs_task_definition.webapp.arn
   triggers                           = {}
-
-  alarms {
-    alarm_names = []
-    enable      = false
-    rollback    = false
-  }
 
   deployment_circuit_breaker {
     enable   = true
@@ -71,12 +64,9 @@ resource "aws_ecs_service" "webapp" {
   network_configuration {
     assign_public_ip = false
     security_groups = [
-      "sg-0ccbfeaa2f89bea0f",
+      aws_security_group.ecs_service_webapp_sg.id,
     ]
-    subnets = [
-      "subnet-056a811aaba5d6b42",
-      "subnet-0fc47ec5d394fbfe9",
-    ]
+    subnets         = module.vpc.public_subnets
   }
 }
 
