@@ -14,60 +14,57 @@ from pydantic import BaseModel, ConfigDict, Field
 from redis.asyncio import Redis
 
 from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
-                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PORT,
-                      configure_logging, get_redis_client)
+                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PASSWORD,
+                      REDIS_PORT, configure_logging)
+from ..libs.cache import cache
+from ..libs.cache import close as close_cache
+from ..libs.cache import init_cache
 from ..libs.messaging.event_stream import (EventStreamClient,
                                            create_event_stream)
 
 load_dotenv()  # take environment variables
 
 
-# --- Dependencies ---
-redis_client = None
-
-def get_redis() -> Redis:
-    """FastAPI dependency that returns the Redis client."""
-    if redis_client is None:
-        raise RuntimeError("Redis client not initialized")
-    return redis_client
-
 async def get_event_stream() -> EventStreamClient:
     """FastAPI dependency that returns the EventStream client."""
-    return await create_event_stream(redis_client=redis_client)
+    return await create_event_stream(redis_client=await cache._backend.client)
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global redis_client
-
     # Configure logging
     configure_logging()
 
-    # Initialize Redis client
-    redis_client = await get_redis_client(
+    # Initialize Cache Service
+    init_cache(
         host=REDIS_HOST,
         port=REDIS_PORT,
         db=REDIS_DB,
+        password=REDIS_PASSWORD,
+        socket_timeout=5.0,
+        socket_connect_timeout=5.0,
+        socket_keepalive=True,
+        max_connections=10,
     )
 
-    # Initialize elevator statuses
+    # Initialize elevator statuses in cache
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
-        initial_state = {
-            "id": i,
-            "current_floor": 1,
-            "status": "idle",
-            "door_status": "closed",
-            "destinations": [],
-        }
-        await redis_client.set(key, json.dumps(initial_state))
+        if not await cache.exists(key):
+            initial_state = {
+                "id": i,
+                "current_floor": 1,
+                "status": "idle",
+                "door_status": "closed",
+                "destinations": [],
+            }
+            await cache.set(key, initial_state)
 
     try:
         yield
     finally:
-        # Cleanup if needed
-        if redis_client:
-            await redis_client.close()
+        # Cleanup
+        await close_cache()
 
 
 app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
@@ -105,20 +102,15 @@ class InternalRequestModel(BaseModel):
 
 
 
-async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dict]:
+async def fetch_elevator_statuses() -> list[dict]:
+    """Fetch all elevator statuses from cache."""
     statuses = []
-
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
-        raw = await redis.get(key)
-        if not raw:
-            continue
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        eid = int(key.split(":")[-1])
-        statuses.append((eid, data))
+        data = await cache.get(key)
+        if data:
+            statuses.append((i, data))
+    # Sort by elevator ID
     statuses.sort(key=lambda x: x[0])
     return [data for _, data in statuses]
 
@@ -165,8 +157,9 @@ async def create_external_request(
 
 
 @app.get("/api/elevators", status_code=200)
-async def get_elevators(redis: Redis = Depends(get_redis)):
-    return {"elevators": await fetch_elevator_statuses(redis)}
+async def get_elevators():
+    """Get current status of all elevators."""
+    return {"elevators": await fetch_elevator_statuses()}
 
 
 @app.get("/api/requests", status_code=200)
@@ -215,23 +208,21 @@ async def trim_stream(
     return {"trimmed": trimmed_count}
 
 
-@app.get("/elevator-table", response_class=HTMLResponse)
-async def elevator_table(
-    request: Request,
-    redis: Redis = Depends(get_redis),
-):
-    elevators = await fetch_elevator_statuses(redis)
+@app.get("/elevator-table")
+async def elevator_table(request: Request):
+    """Render the elevator table view."""
+    elevators = await fetch_elevator_statuses()
     return templates.TemplateResponse(
-        "elevator_table.html", {"request": request, "elevators": elevators}
+        "elevator_table.html",
+        {"request": request, "elevators": elevators, "num_floors": NUM_FLOORS},
     )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(
-    request: Request,
-    redis: Redis = Depends(get_redis),
-):
-    elevators = await fetch_elevator_statuses(redis)
+@app.get("/")
+async def index(request: Request):
+    """Render the main index page."""
+    elevators = await fetch_elevator_statuses()
     return templates.TemplateResponse(
-        "index.html", {"request": request, "elevators": elevators}
+        "index.html",
+        {"request": request, "elevators": elevators},
     )

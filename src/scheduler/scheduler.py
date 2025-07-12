@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 import structlog
-from redis.asyncio import Redis
 from redis.exceptions import ConnectionError
 
 from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
                       ELEVATOR_STATUS, NUM_ELEVATORS)
+from ..libs.cache import cache
 from ..libs.messaging.event_stream import EventStreamClient
 from ..libs.messaging.pubsub import PubSubClient
 from ..models.elevator import Elevator, ElevatorStatus
@@ -264,7 +264,6 @@ class Scheduler:
     def __init__(
         self,
         id: str,
-        redis_client: Redis,
         pubsub: PubSubClient,
         event_stream: EventStreamClient,
         config: Optional[Dict] = None
@@ -273,14 +272,12 @@ class Scheduler:
 
         Args:
             id: Unique identifier for this scheduler instance
-            redis_client: Redis client for key-value operations
             pubsub: PubSub client for message passing
             event_stream: Event stream client for stream operations
             config: Optional configuration dictionary
         """
         self.id = id
         self.consumer_id = f"scheduler-{id}"
-        self.redis_client = redis_client
         self.pubsub = pubsub
         self.event_stream = event_stream
         self.config = config or {}
@@ -432,14 +429,11 @@ class Scheduler:
     async def _load_elevator_states(self) -> None:
         for elevator_id in range(1, NUM_ELEVATORS + 1):
             key = ELEVATOR_STATUS.format(elevator_id)
-            state = await self.redis_client.get(key)
-            if state:
-                # Convert to proper types
-                self.elevator_states[elevator_id] = Elevator.from_dict(
-                    json.loads(state)
-                )
-            else:
+            state = await cache.get(key)
+            if state is None:
                 raise ValueError(f"Elevator {elevator_id} not found")
+            # Convert to proper types
+            self.elevator_states[elevator_id] = Elevator.from_dict(state)
 
     async def _select_best_elevator_for_external(
         self, request: ExternalRequest
