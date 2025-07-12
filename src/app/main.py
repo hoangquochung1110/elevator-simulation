@@ -11,23 +11,26 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
-from redis.asyncio import Redis
 
-from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
-                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PASSWORD,
-                      REDIS_PORT, configure_logging)
+from ..config import (
+    ELEVATOR_REQUESTS_STREAM,
+    ELEVATOR_STATUS,
+    NUM_ELEVATORS,
+    NUM_FLOORS,
+    REDIS_DB,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    configure_logging,
+)
 from ..libs.cache import cache
 from ..libs.cache import close as close_cache
 from ..libs.cache import init_cache
-from ..libs.messaging.event_stream import (EventStreamClient,
-                                           create_event_stream)
+from ..libs.messaging.event_stream import close as close_event_stream
+from ..libs.messaging.event_stream import event_stream, init_event_stream
 
 load_dotenv()  # take environment variables
 
-
-async def get_event_stream() -> EventStreamClient:
-    """FastAPI dependency that returns the EventStream client."""
-    return await create_event_stream(redis_client=await cache._backend.client)
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
@@ -41,10 +44,14 @@ async def lifespan(app: FastAPI):
         port=REDIS_PORT,
         db=REDIS_DB,
         password=REDIS_PASSWORD,
-        socket_timeout=5.0,
-        socket_connect_timeout=5.0,
-        socket_keepalive=True,
-        max_connections=10,
+    )
+
+    # Initialize Event Stream Service
+    init_event_stream(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        password=REDIS_PASSWORD,
     )
 
     # Initialize elevator statuses in cache
@@ -65,6 +72,7 @@ async def lifespan(app: FastAPI):
     finally:
         # Cleanup
         await close_cache()
+        await close_event_stream()
 
 
 app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
@@ -101,7 +109,6 @@ class InternalRequestModel(BaseModel):
     )
 
 
-
 async def fetch_elevator_statuses() -> list[dict]:
     """Fetch all elevator statuses from cache."""
     statuses = []
@@ -116,11 +123,7 @@ async def fetch_elevator_statuses() -> list[dict]:
 
 
 @app.post("/api/requests/internal", status_code=202)
-async def create_internal_request(
-    req: InternalRequestModel,
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
-    # serialize Pydantic model to JSON string
+async def create_internal_request(req: InternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
@@ -130,17 +133,12 @@ async def create_internal_request(
             "status": "pending",
         }
     )
-    # await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
-async def create_external_request(
-    req: ExternalRequestModel,
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
-    # serialize Pydantic model to JSON string
+async def create_external_request(req: ExternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
@@ -150,8 +148,6 @@ async def create_external_request(
             "status": "pending",
         }
     )
-
-    # Streams should accept Python dict
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
@@ -163,48 +159,34 @@ async def get_elevators():
 
 
 @app.get("/api/requests", status_code=200)
-async def get_stream_requests(
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
+async def get_stream_requests():
     """Retrieve all entries from the elevator requests stream"""
     entries = await event_stream.range(ELEVATOR_REQUESTS_STREAM, "-", "+")
     requests = []
     for msg_id, fields in entries:
-        # include message ID with each entry
-        entry = {"id": msg_id}
-        entry.update(fields)
+        entry = {"id": msg_id, **fields}
         requests.append(entry)
     return {"requests": requests}
 
 
 @app.delete("/api/requests", status_code=200)
 async def trim_stream(
-    min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
+    min_id: Optional[str] = Query(
+        None, description="Exclusive start ID; entries with ID < min_id will be removed"
+    ),
     maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
-    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     """
     Trim the elevator requests stream using XTRIM.
     Only one of min_id or maxlen must be provided.
     """
-    # Enforce exclusive parameters
-    if (min_id is None and maxlen is None) or (min_id is not None and maxlen is not None):
-        raise HTTPException(status_code=400, detail="Provide exactly one of min_id or maxlen")
-    # Trim by count
-    if maxlen is not None:
-        trimmed_count = await event_stream.trim(
-            ELEVATOR_REQUESTS_STREAM,
-            maxlen=maxlen,
-            approximate=approximate,
-        )
-    else:
-        # Trim by ID
-        trimmed_count = await event_stream.trim(
-            ELEVATOR_REQUESTS_STREAM,
-            minid=min_id,
-            approximate=approximate,
-        )
+    trimmed_count = await event_stream.trim(
+        ELEVATOR_REQUESTS_STREAM,
+        min_id=min_id,
+        maxlen=maxlen,
+        approximate=approximate,
+    )
     return {"trimmed": trimmed_count}
 
 
