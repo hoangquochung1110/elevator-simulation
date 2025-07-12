@@ -7,63 +7,82 @@ It listens to elevator requests and assigns them to the most appropriate elevato
 """
 
 import asyncio
-import os
 import signal
-import sys
 
 import structlog
 
-from src.config import (NUM_ELEVATORS, REDIS_DB, REDIS_HOST, REDIS_PASSWORD,
-                        REDIS_PORT, configure_logging, get_redis_client)
-from src.controller.controller import \
-    ElevatorController  # Assuming you move scheduler.py to this location
-
-# Set up graceful shutdown
-shutdown_event = asyncio.Event()
+from src.config import NUM_ELEVATORS, configure_logging
+from src.controller.controller import ElevatorController
 
 logger = structlog.get_logger(__name__)
 
 
-def handle_signals():
-    """Set up signal handlers for graceful shutdown."""
+async def shutdown(signal, loop):
+    """Cleanup tasks tied to the service's shutdown."""
+    logger.info(f"Received exit signal {signal.name}...")
 
-    def handle_exit(sig, frame):
-        print(f"Received exit signal {sig}. Shutting down gracefully...")
-        shutdown_event.set()
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 
-    # Register signal handlers
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
+    for task in tasks:
+        task.cancel()
+
+    logger.info(f"Cancelling {len(tasks)} outstanding tasks")
+    await asyncio.gather(*tasks, return_exceptions=True)
+    loop.stop()
 
 
 async def main():
-    # Initialize Redis client
-    redis_client = await get_redis_client(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        password=REDIS_PASSWORD
-    )
+    # Set up signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(
+            sig, lambda s=sig: asyncio.create_task(shutdown(s, loop))
+        )
 
+    controllers = []
     try:
-        # dynamically create controllers based on config
+        # Dynamically create controllers based on config
         controllers = [
-            ElevatorController(
-                elevator_id=i+1,
-                redis_client=redis_client
-            ) for i in range(NUM_ELEVATORS)
+            ElevatorController(elevator_id=i + 1) for i in range(NUM_ELEVATORS)
         ]
 
-        # start all controllers
-        await asyncio.gather(
-            *[c.start() for c in controllers],
-        )
+        # Start all controllers
+        logger.info("Starting elevator controller service...")
+        start_tasks = [c.start() for c in controllers]
+        await asyncio.gather(*start_tasks)
+
+        # Keep the service running until shutdown signal is received
+        logger.info("Elevator controller service started")
+        while True:
+            await asyncio.sleep(3600)  # Long sleep to reduce CPU usage
+
+    except asyncio.CancelledError:
+        logger.info("Shutdown sequence initiated")
+    except Exception as e:
+        logger.error(f"Error in controller service: {e}")
+        raise
     finally:
-        # Ensure Redis connection is properly closed
-        if redis_client:
-            await redis_client.close()
+        logger.info("Shutting down controllers...")
+        if controllers:
+            stop_tasks = [c.stop() for c in controllers]
+            await asyncio.gather(*stop_tasks, return_exceptions=True)
+        logger.info("All controllers stopped")
+
+
+def run():
+    """Run the controller service."""
+    configure_logging()
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Service stopped by keyboard interrupt")
+    except Exception as e:
+        logger.error(f"Service failed: {e}")
+        raise
+    finally:
+        logger.info("Service shutdown complete")
+
 
 if __name__ == "__main__":
-    configure_logging()
-    handle_signals()
-    asyncio.run(main())
+    run()

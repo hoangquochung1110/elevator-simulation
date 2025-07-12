@@ -4,12 +4,10 @@ Event Stream service implementation.
 This module provides a high-level interface for event streaming operations,
 with Redis as the default backend.
 """
-import asyncio
 import logging
 from typing import Any, List, Optional, Union
 
 from .base import EventStreamClient
-from .exceptions import EventStreamConnectionError
 from .redis import RedisStreamClient
 
 logger = logging.getLogger(__name__)

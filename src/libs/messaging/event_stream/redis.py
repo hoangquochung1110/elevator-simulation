@@ -2,7 +2,6 @@
 Redis Streams implementation of the Event Stream client interface.
 """
 import json
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import structlog

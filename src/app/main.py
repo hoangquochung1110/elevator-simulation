@@ -1,13 +1,11 @@
 # src/main.py
-import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field

@@ -3,12 +3,8 @@ Base cache backend interface.
 
 This module defines the abstract base class that all cache backends must implement.
 """
-import json
-import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
-
-from libs.cache.exceptions import CacheError
+from typing import Any, Dict, List, Optional
 
 
 class BaseCacheBackend(ABC):

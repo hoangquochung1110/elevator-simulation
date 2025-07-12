@@ -1,21 +1,14 @@
 import asyncio
 import json
-import random
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import structlog
-from redis.exceptions import ConnectionError
 
-from ..config import (
-    ELEVATOR_COMMANDS,
-    ELEVATOR_REQUESTS_STREAM,
-    ELEVATOR_STATUS,
-    NUM_ELEVATORS,
-)
+from ..config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
+                      ELEVATOR_STATUS, NUM_ELEVATORS)
 from ..libs.cache import cache
 from ..libs.messaging.event_stream import event_stream
-from ..libs.messaging.pubsub import PubSubClient
+from ..libs.messaging.pubsub import pubsub
 from ..models.elevator import Elevator, ElevatorStatus
 from ..models.request import Direction, ExternalRequest, InternalRequest
 
@@ -32,12 +25,10 @@ class Scheduler:
     def __init__(
         self,
         id: str,
-        pubsub: PubSubClient,
         config: Optional[Dict] = None
     ):
         self.id = id
         self.consumer_id = f"scheduler-{id}"
-        self.pubsub = pubsub
         self.config = config or {}
         self.elevator_states: Dict[int, Elevator] = {}
         self._running: bool = False
@@ -63,7 +54,7 @@ class Scheduler:
         # Load initial elevator states
         await self._load_elevator_states()
 
-        # Main loop to process messages
+        # Main loop to process messages from event stream
         while self._running:
             try:
                 messages = await event_stream._backend.read_group(
@@ -91,15 +82,40 @@ class Scheduler:
                 self.logger.error("Error in scheduler loop", error=str(e), exc_info=True)
                 await asyncio.sleep(5)  # Wait before retrying
 
+    async def _listen_for_commands(self) -> None:
+        """Continuously listen for commands on the scheduler command channel."""
+        try:
+            async for message in self.pubsub.listen():
+                if not self._running:
+                    break
+                # The message is already a decoded dictionary from the listen method
+                await self._handle_scheduler_command(message)
+        except asyncio.CancelledError:
+            self.logger.info("Scheduler command listening task cancelled")
+        except Exception as e:
+            self.logger.error("Error in scheduler command listening task", error=str(e), exc_info=True)
+
+    async def _handle_scheduler_command(self, command_data: Dict[str, Any]) -> None:
+        """Handle an incoming command message for the scheduler."""
+        command_type = command_data.get("command")
+        self.logger.info("received_scheduler_command", command=command_type, data=command_data)
+
+        if command_type == "reload_elevator_states":
+            await self._load_elevator_states()
+            self.logger.info("Elevator states reloaded by command")
+        else:
+            self.logger.warning("unknown_scheduler_command", command=command_type, data=command_data)
+
     async def stop(self) -> None:
         """Stop the scheduler and clean up resources."""
         self._running = False
-        if hasattr(self, "pubsub") and self.pubsub is not None:
-            try:
-                await self.pubsub.close()
-                self.logger.info("Closed pubsub client")
-            except Exception as e:
-                self.logger.error("Error closing pubsub client", exc_info=True)
+
+        try:
+            from ..libs.messaging.pubsub import close as close_pubsub
+            await close_pubsub()
+            self.logger.info("Closed pubsub client")
+        except Exception as e:
+            self.logger.error("Error closing pubsub client", exc_info=True)
         self.logger.info("Scheduler stopped")
 
     async def _handle_message(self, message_id: str, data: dict) -> None:
@@ -136,7 +152,7 @@ class Scheduler:
                 "floor": request.floor,
                 "request_id": request.id,
             }
-            await self.pubsub.publish(
+            await pubsub.publish(
                 ELEVATOR_COMMANDS.format(elevator_id), json.dumps(command)
             )
             self.logger.info(
@@ -160,7 +176,7 @@ class Scheduler:
             "floor": request.destination_floor,
             "request_id": request.id,
         }
-        await self.pubsub.publish(
+        await pubsub.publish(
             ELEVATOR_COMMANDS.format(request.elevator_id), json.dumps(command)
         )
         self.logger.info(

@@ -4,17 +4,12 @@ Cache service implementation.
 This module provides a high-level interface for caching operations,
 with Redis as the default backend.
 """
-import asyncio
 import functools
-import inspect
 import logging
-from datetime import timedelta
-from typing import (Any, Awaitable, Callable, Dict, List, Optional, Type,
-                    TypeVar, Union)
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from .backends import BaseCacheBackend
 from .backends.redis import RedisBackend
-from .exceptions import CacheConnectionError, CacheError, CacheMissError
 
 logger = logging.getLogger(__name__)
 

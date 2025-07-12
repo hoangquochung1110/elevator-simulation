@@ -12,6 +12,8 @@ import json
 import structlog
 
 from ..config import ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS
+from ..libs.cache import cache
+from ..libs.messaging.pubsub import get_local_pubsub
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
@@ -26,18 +28,15 @@ class ElevatorController:
     4. Manages the elevator's destinations
     """
 
-    def __init__(self, elevator_id: int, initial_floor: int = 1, redis_client=None):
+    def __init__(self, elevator_id: int, initial_floor: int = 1):
         """
         Initialize the elevator service.
 
         Args:
             elevator_id: Unique identifier for this elevator
             initial_floor: The floor where this elevator starts
-            redis_client: Optional Redis client instance to use
         """
         self.elevator = Elevator(elevator_id=elevator_id, initial_floor=initial_floor)
-        self.redis_client = redis_client
-        self.pubsub = None
         # Set up subscriber for command channel
         self.command_channel = ELEVATOR_COMMANDS.format(elevator_id)
         self.status_channel = ELEVATOR_STATUS.format(elevator_id)
@@ -45,6 +44,7 @@ class ElevatorController:
         self._movement_task = None
         self.elevator_state = None
         self.logger = structlog.get_logger(__name__)
+        self.pubsub = get_local_pubsub()
 
     async def start(self) -> None:
         """
@@ -52,21 +52,18 @@ class ElevatorController:
 
         This starts the command subscriber and initializes the elevator state.
         """
-        if self.redis_client is None:
-            raise ValueError("Redis client must be provided to ElevatorController")
-            
         self._running = True
-        self.pubsub = self.redis_client.pubsub()
+        # Set up subscriber for command channel
         await self.pubsub.subscribe(self.command_channel)
 
         # Load initial elevator states
         await self._load_elevator_state()
 
         try:
-            async for msg in self.pubsub.listen():
-                if not self._running:
-                    break
-                await self._handle_command(msg)
+            while self._running:
+                msg = await self.pubsub._backend._pubsub.get_message(timeout=1.0)
+                if msg is not None:
+                    await self._handle_command(msg)
         finally:
             await self.stop()
 
@@ -74,8 +71,8 @@ class ElevatorController:
         """Stop the elevator service."""
         self._running = False
         # unsubscribe from all channels and patterns, then close pubsub
-        await self.pubsub.unsubscribe()
-        await self.pubsub.punsubscribe()
+        await self.pubsub.unsubscribe(self.command_channel)
+        # await pubsub.punsubscribe()
         await self.pubsub.close()
 
         if self._movement_task:
@@ -140,7 +137,9 @@ class ElevatorController:
             raise ValueError
 
         if floor == self.elevator.current_floor:
-            self.logger.info("duplicate_floor_request", floor=self.elevator.current_floor)
+            self.logger.info(
+                "duplicate_floor_request", floor=self.elevator.current_floor
+            )
             # Already at this floor, just open the door
             await self.open_door()
             # Wait for passengers to enter/exit, then close door
@@ -206,7 +205,9 @@ class ElevatorController:
             return
 
         if floor == self.elevator.current_floor:
-            self.logger.info("duplicate_floor_request", floor=self.elevator.current_floor)
+            self.logger.info(
+                "duplicate_floor_request", floor=self.elevator.current_floor
+            )
             await self.open_door()
             await asyncio.sleep(2)
             await self.close_door()
@@ -243,20 +244,22 @@ class ElevatorController:
         }
 
         # Publish to status channel
-        await self.redis_client.publish(self.status_channel, json.dumps(status))
+        await self.pubsub.publish(self.status_channel, json.dumps(status))
 
     async def _persist_state(self):
-        await self.redis_client.set(
-            self.status_channel, json.dumps(self.elevator.to_dict())
-        )
+        await cache.set(self.status_channel, json.dumps(self.elevator.to_dict()))
 
     async def _load_elevator_state(self) -> None:
         key = self.status_channel
-        state = await self.redis_client.get(key)
+        state = await cache.get(key)
+        # import ipdb; ipdb.set_trace()
         if state:
-            self.elevator = Elevator.from_dict(json.loads(state))
+            # self.elevator = Elevator.from_dict(json.loads(state))
+            self.elevator = Elevator.from_dict(state)
         else:
-            self.logger.warning("elevator_state_not_found", elevator_id=self.elevator.id)
+            self.logger.warning(
+                "elevator_state_not_found", elevator_id=self.elevator.id
+            )
 
     async def _process_movement(self) -> None:
         """

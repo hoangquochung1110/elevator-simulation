@@ -16,3 +16,6 @@ ELEVATOR_SYSTEM = "elevator:system"
 
 # Channel that alternative to ELEVATOR_REQUESTS, using Redis Stream
 ELEVATOR_REQUESTS_STREAM = "elevator:requests:stream"
+
+# Channel for sending commands to the scheduler
+SCHEDULER_COMMANDS = "scheduler:commands"

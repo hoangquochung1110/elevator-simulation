@@ -3,7 +3,6 @@ Redis cache backend implementation.
 """
 import json
 import logging
-import pickle
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union, cast
 

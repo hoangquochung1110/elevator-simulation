@@ -1,28 +1,12 @@
-"""
-Pub/Sub messaging client interface and implementations.
-
-This module provides an abstract base class for pub/sub messaging clients
-and concrete implementations for different messaging backends.
-"""
-from __future__ import annotations
-
-import typing
+"""Abstract base class for pub/sub clients."""
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, Optional, Type, Union
+from typing import Any, AsyncIterator, Dict, Union
 
-
-async def create_pubsub_client(provider='redis', **kwargs):
-    if provider == 'redis':
-        from .redis import create_redis_pubsub
-        return await create_redis_pubsub(**kwargs)
-    else:
-        raise ValueError(f"Unsupported event stream provider: {provider}")
 
 class PubSubClient(ABC):
-    """Abstract base class for pub/sub messaging clients.
+    """Abstract base class for pub/sub clients.
 
-    This class defines the interface that all concrete pub/sub client
-    implementations must follow.
+    This defines the interface that all pub/sub implementations must follow.
     """
 
     @abstractmethod
@@ -58,13 +42,5 @@ class PubSubClient(ABC):
 
     @abstractmethod
     async def close(self) -> None:
-        """Close the client and release any resources."""
+        """Close the connection to the pub/sub backend."""
         pass
-
-    async def __aenter__(self):
-        """Support async context manager protocol."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Ensure resources are cleaned up when exiting context."""
-        await self.close()
