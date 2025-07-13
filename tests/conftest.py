@@ -40,7 +40,7 @@ async def redis_client():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def app_dependencies(redis_client):
+async def app_dependencies(redis_client, mock_app_cache, mock_app_event_stream):
     """
     General purpose fixture for managing FastAPI dependency overrides.
     This fixture can be used to override any dependency in the FastAPI app.
@@ -160,5 +160,7 @@ def mock_controller_pubsub(mocker):
     mock_pubsub_instance._backend._pubsub.get_message = AsyncMock()
     mock_pubsub_instance._backend._ensure_connected = AsyncMock()
 
-    mocker.patch("src.controller.controller.get_local_pubsub", return_value=mock_pubsub_instance)
+    mocker.patch(
+        "src.controller.controller.get_local_pubsub", return_value=mock_pubsub_instance
+    )
     return mock_pubsub_instance

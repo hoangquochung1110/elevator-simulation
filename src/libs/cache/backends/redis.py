@@ -1,23 +1,22 @@
 """
 Redis cache backend implementation.
 """
+
 import json
 import logging
-from datetime import timedelta
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union, cast
+from typing import Any, Dict, List, Optional, TypeVar
 
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import ResponseError
 
-from libs.cache.exceptions import (CacheConnectionError, CacheError,
-                                   CacheMissError)
+from src.libs.cache.exceptions import CacheConnectionError, CacheError
 
 from . import BaseCacheBackend
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class RedisBackend(BaseCacheBackend):
     """Redis cache backend implementation."""
