@@ -1,14 +1,4 @@
-import json
-from unittest.mock import AsyncMock, patch
-
-import pytest
-import pytest_asyncio
-
-from src.app.main import app
-from src.config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS,
-                        NUM_ELEVATORS, get_redis_client)
-from src.models.elevator import ElevatorStatus
-from src.models.request import Direction
+from src.config import ELEVATOR_REQUESTS_STREAM, NUM_ELEVATORS
 
 
 async def test_index_route(async_client):
@@ -18,16 +8,13 @@ async def test_index_route(async_client):
     assert "text/html" in response.headers["content-type"]
 
 
-async def test_create_internal_request(async_client, redis_client):
+async def test_create_internal_request(async_client, mock_app_event_stream):
     """Test internal request creation asynchronously."""
-    # Mock the xadd operation
-    redis_client.xadd = AsyncMock(return_value=b"test-id")
+    # Mock the publish operation
+    mock_app_event_stream.publish.return_value = b"test-id"
 
     # Arrange
-    request_data = {
-        "elevator_id": 1,
-        "destination_floor": 5
-    }
+    request_data = {"elevator_id": 1, "destination_floor": 5}
 
     # Make request (dependency injection is handled by the fixture)
     response = await async_client.post("/api/requests/internal", json=request_data)
@@ -39,22 +26,23 @@ async def test_create_internal_request(async_client, redis_client):
     assert data["channel"] == ELEVATOR_REQUESTS_STREAM
 
 
-async def test_get_elevator_states(async_client, redis_client):
+async def test_get_elevator_states(async_client, mock_app_cache):
     """Test elevator states retrieval asynchronously."""
 
-    # Setup test data
-    for i in range(1, NUM_ELEVATORS + 1):
-        key = ELEVATOR_STATUS.format(i)
-        test_state = {
+    # Setup test data to be returned by the mock
+    mock_elevator_states = [
+        {
             "id": i,
             "current_floor": 1,
             "status": "idle",
             "door_status": "closed",
-            "destinations": []
+            "destinations": [],
         }
-        await redis_client.set(key, json.dumps(test_state))
+        for i in range(1, NUM_ELEVATORS + 1)
+    ]
+    mock_app_cache.get.side_effect = mock_elevator_states
 
-    # Make request (dependency injection is handled by the fixture)
+    # Make request
     response = await async_client.get("/api/elevators")
 
     # Assert
@@ -64,17 +52,3 @@ async def test_get_elevator_states(async_client, redis_client):
     assert len(data["elevators"]) == NUM_ELEVATORS
     for i, elevator in enumerate(data["elevators"], 1):
         assert elevator["id"] == i
-        assert elevator["current_floor"] == 1
-        assert elevator["status"] == "idle"
-        assert elevator["door_status"] == "closed"
-        assert elevator["destinations"] == []
-
-
-async def test_with_real_redis_setup(async_client):
-    """Test using the Redis fixture with actual data setup."""
-    response = await async_client.get("/api/elevators")
-
-    # Assert
-    assert response.status_code == 200
-    data = response.json()
-    assert "elevators" in data

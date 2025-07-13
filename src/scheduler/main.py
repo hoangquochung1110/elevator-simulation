@@ -9,14 +9,17 @@ It listens to elevator requests and assigns them to the most appropriate elevato
 import asyncio
 import os
 import signal
-
-
-from typing import Any, Dict
+import sys
 
 import structlog
 
-from src.config import (REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT,
-                        configure_logging)
+from src.config import (
+    REDIS_DB,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    configure_logging,
+)
 from src.libs.cache import close as close_cache
 from src.libs.cache import init_cache
 from src.libs.messaging.event_stream import close as close_event_stream
@@ -48,7 +51,6 @@ async def main():
     # Configuration
     config = {
         "scheduler_id": os.getenv("SCHEDULER_ID", "1"),
-        
         "event_stream_config": {
             "provider": os.getenv("EVENT_STREAM_PROVIDER", "redis"),
         },
@@ -88,6 +90,7 @@ async def main():
             await scheduler.stop()
         await close_cache()
         await close_event_stream()
+        await close_pubsub()
         logger.info("Scheduler shutdown complete")
 
 

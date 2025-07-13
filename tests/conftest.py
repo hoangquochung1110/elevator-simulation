@@ -9,20 +9,23 @@ from fakeredis.aioredis import FakeRedis
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from src.app.main import app, get_redis
-from src.config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS,
-                        NUM_ELEVATORS, get_redis_client)
+from src.app.main import app
+from src.config import (
+    ELEVATOR_REQUESTS_STREAM,
+    ELEVATOR_STATUS,
+    NUM_ELEVATORS,
+    get_redis_client,
+)
 
 # Configure pytest-asyncio
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest_asyncio.fixture
 async def async_client():
     """Create an async client for testing."""
     async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
 
@@ -31,6 +34,7 @@ async def async_client():
 async def redis_client():
     """Create a FakeRedis client for testing (the same one the app uses)."""
     from fakeredis import FakeAsyncRedis
+
     redis_client = FakeAsyncRedis(decode_responses=True)
     return redis_client
 
@@ -52,7 +56,7 @@ async def app_dependencies(redis_client):
     app.dependency_overrides = {}
 
     try:
-        app.dependency_overrides[get_redis] = lambda: redis_client
+        pass
     except KeyError:
         pass
     else:
@@ -71,11 +75,10 @@ async def elevators(redis_client):
             "current_floor": 1,
             "status": "idle",
             "door_status": "closed",
-            "destinations": []
+            "destinations": [],
         }
         await redis_client.set(
-            ELEVATOR_STATUS.format(elevator_id),
-            json.dumps(elevator_state)
+            ELEVATOR_STATUS.format(elevator_id), json.dumps(elevator_state)
         )
     yield redis_client
 
@@ -106,3 +109,56 @@ async def event_loop():
             loop.close()
         except Exception:
             pass
+
+
+@pytest.fixture
+def mock_app_cache(mocker):
+    """Mocks the cache for the application."""
+    return mocker.patch("src.app.main.cache", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_app_event_stream(mocker):
+    """Mocks the event stream for the application."""
+    return mocker.patch("src.app.main.event_stream", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_scheduler_cache(mocker):
+    """Mocks the cache for the scheduler."""
+    return mocker.patch("src.scheduler.scheduler.cache", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_scheduler_event_stream(mocker):
+    """Mocks the event stream for the scheduler."""
+    return mocker.patch("src.scheduler.scheduler.event_stream", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_scheduler_pubsub(mocker):
+    """Mocks the pubsub for the scheduler."""
+    return mocker.patch("src.scheduler.scheduler.pubsub", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_controller_cache(mocker):
+    """Mocks the cache for the controller."""
+    return mocker.patch("src.controller.controller.cache", new_callable=AsyncMock)
+
+
+@pytest.fixture
+def mock_controller_pubsub(mocker):
+    """Mocks the pubsub for the controller."""
+    mock_pubsub_instance = AsyncMock()
+    mock_pubsub_instance.subscribe = AsyncMock()
+    mock_pubsub_instance.unsubscribe = AsyncMock()
+    mock_pubsub_instance.close = AsyncMock()
+    mock_pubsub_instance.publish = AsyncMock()
+    mock_pubsub_instance._backend = AsyncMock()
+    mock_pubsub_instance._backend._pubsub = AsyncMock()
+    mock_pubsub_instance._backend._pubsub.get_message = AsyncMock()
+    mock_pubsub_instance._backend._ensure_connected = AsyncMock()
+
+    mocker.patch("src.controller.controller.get_local_pubsub", return_value=mock_pubsub_instance)
+    return mock_pubsub_instance
