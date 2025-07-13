@@ -1,32 +1,8 @@
+"""
+Abstract base class for event stream clients.
+"""
 from abc import ABC, abstractmethod
-
-
-async def create_event_stream(provider='redis', **kwargs):
-    """Factory function to create an event stream client.
-
-    Args:
-        provider: The event stream provider to use ('redis' is the default and currently only option)
-        **kwargs: Additional arguments to pass to the provider's create function
-
-    Returns:
-        An instance of EventStreamClient
-
-    Example:
-        # Create a Redis stream client with default settings
-        stream = await create_event_stream()
-
-        # Create with custom Redis connection
-        stream = await create_event_stream(
-            host='redis.example.com',
-            port=6380,
-            password='secret'
-        )
-    """
-    if provider == 'redis':
-        from .redis import create_redis_stream
-        return await create_redis_stream(**kwargs)
-    else:
-        raise ValueError(f"Unsupported event stream provider: {provider}")
+from typing import Any, List, Optional
 
 
 class EventStreamClient(ABC):
@@ -36,7 +12,7 @@ class EventStreamClient(ABC):
     """
 
     @abstractmethod
-    async def publish(self, stream, data):
+    async def publish(self, stream: str, data: Any) -> str:
         """Publish an event to a stream.
 
         Args:
@@ -49,7 +25,7 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def create_consumer_group(self, stream, group):
+    async def create_consumer_group(self, stream: str, group: str) -> bool:
         """Create a consumer group for a stream.
 
         Args:
@@ -62,7 +38,15 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def read_group(self, stream, group, consumer, count=None, block=None, last_id=">"):
+    async def read_group(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        count: Optional[int] = None,
+        block: Optional[int] = None,
+        last_id: str = ">",
+    ) -> List[Any]:
         """Read messages from a consumer group.
 
         Args:
@@ -79,7 +63,7 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def acknowledge(self, stream, group, *message_ids):
+    async def acknowledge(self, stream: str, group: str, *message_ids: str) -> int:
         """Acknowledge messages in a stream.
 
         Args:
@@ -93,7 +77,9 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def resume_processing(self, stream, group, consumer):
+    async def resume_processing(
+        self, stream: str, group: str, consumer: str
+    ) -> List[Any]:
         """Resume processing from where this consumer left off.
 
         This should read both pending and new messages.
@@ -109,7 +95,13 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def rebalance_workload(self, stream, group, consumer, inactive_timeout_ms=30000):
+    async def rebalance_workload(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        inactive_timeout_ms: int = 30000,
+    ) -> List[Any]:
         """Claim and process messages from inactive consumers.
 
         Args:
@@ -124,7 +116,13 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def get_pending(self, stream, group, consumer=None, count=None):
+    async def get_pending(
+        self,
+        stream: str,
+        group: str,
+        consumer: Optional[str] = None,
+        count: Optional[int] = None,
+    ) -> List[Any]:
         """Get pending messages from a consumer group.
 
         Args:
@@ -139,7 +137,14 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def claim_pending(self, stream, group, consumer, min_idle_time, *message_ids):
+    async def claim_pending(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        min_idle_time: int,
+        *message_ids: str,
+    ) -> List[Any]:
         """Claim pending messages in a stream.
 
         Args:
@@ -155,7 +160,7 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def stream_info(self, stream):
+    async def stream_info(self, stream: str) -> Any:
         """Get information about a stream.
 
         Args:
@@ -167,6 +172,41 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def close(self):
+    async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
+        """Retrieve entries from a stream within a given range.
+
+        Args:
+            stream: Name of the stream
+            start: Start ID of the range
+            end: End ID of the range
+
+        Returns:
+            List of entries
+        """
+        pass
+
+    @abstractmethod
+    async def trim(
+        self,
+        stream: str,
+        min_id: Optional[str] = None,
+        maxlen: Optional[int] = None,
+        approximate: bool = True,
+    ) -> int:
+        """Trim a stream to a certain size.
+
+        Args:
+            stream: Name of the stream
+            min_id: Exclusive start ID; entries with ID < min_id will be removed
+            maxlen: Maximum number of entries to keep
+            approximate: Whether to use approximate trimming
+
+        Returns:
+            Number of trimmed entries
+        """
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
         """Close the connection to the event stream."""
         pass

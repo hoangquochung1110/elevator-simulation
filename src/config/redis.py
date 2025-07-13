@@ -1,7 +1,7 @@
 """
 Simplified Redis client initialization.
 """
-import os
+
 from typing import Optional
 import structlog
 from redis.asyncio import Redis

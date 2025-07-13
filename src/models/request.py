@@ -8,9 +8,10 @@ This module contains two types of requests:
 
 import enum
 import time
-import uuid
 import json
-from typing import Optional
+import uuid
+
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class RequestStatus(str, enum.Enum):

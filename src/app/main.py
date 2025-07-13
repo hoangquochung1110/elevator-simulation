@@ -1,73 +1,76 @@
 # src/main.py
-import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
-from redis.asyncio import Redis
 
-from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
-                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PORT,
-                      configure_logging, get_redis_client)
-from ..libs.messaging.event_stream import (EventStreamClient,
-                                           create_event_stream)
+from ..config import (
+    ELEVATOR_REQUESTS_STREAM,
+    ELEVATOR_STATUS,
+    NUM_ELEVATORS,
+    NUM_FLOORS,
+    REDIS_DB,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    configure_logging,
+)
+from ..libs.cache import cache
+from ..libs.cache import close as close_cache
+from ..libs.cache import init_cache
+from ..libs.messaging.event_stream import close as close_event_stream
+from ..libs.messaging.event_stream import event_stream, init_event_stream
 
 load_dotenv()  # take environment variables
 
 
-# --- Dependencies ---
-redis_client = None
-
-def get_redis() -> Redis:
-    """FastAPI dependency that returns the Redis client."""
-    if redis_client is None:
-        raise RuntimeError("Redis client not initialized")
-    return redis_client
-
-async def get_event_stream() -> EventStreamClient:
-    """FastAPI dependency that returns the EventStream client."""
-    return await create_event_stream(redis_client=redis_client)
-
 # --- Startup and shutdown events ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global redis_client
-
     # Configure logging
     configure_logging()
 
-    # Initialize Redis client
-    redis_client = await get_redis_client(
+    # Initialize Cache Service
+    init_cache(
         host=REDIS_HOST,
         port=REDIS_PORT,
         db=REDIS_DB,
+        password=REDIS_PASSWORD,
     )
 
-    # Initialize elevator statuses
+    # Initialize Event Stream Service
+    init_event_stream(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        password=REDIS_PASSWORD,
+    )
+
+    # Initialize elevator statuses in cache
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
-        initial_state = {
-            "id": i,
-            "current_floor": 1,
-            "status": "idle",
-            "door_status": "closed",
-            "destinations": [],
-        }
-        await redis_client.set(key, json.dumps(initial_state))
+        if not await cache.exists(key):
+            initial_state = {
+                "id": i,
+                "current_floor": 1,
+                "status": "idle",
+                "door_status": "closed",
+                "destinations": [],
+            }
+            await cache.set(key, initial_state)
 
     try:
         yield
     finally:
-        # Cleanup if needed
-        if redis_client:
-            await redis_client.close()
+        # Cleanup
+        await close_cache()
+        await close_event_stream()
 
 
 app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
@@ -104,31 +107,21 @@ class InternalRequestModel(BaseModel):
     )
 
 
-
-async def fetch_elevator_statuses(redis: Redis = Depends(get_redis)) -> list[dict]:
+async def fetch_elevator_statuses() -> list[dict]:
+    """Fetch all elevator statuses from cache."""
     statuses = []
-
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
-        raw = await redis.get(key)
-        if not raw:
-            continue
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        eid = int(key.split(":")[-1])
-        statuses.append((eid, data))
+        data = await cache.get(key)
+        if data:
+            statuses.append((i, data))
+    # Sort by elevator ID
     statuses.sort(key=lambda x: x[0])
     return [data for _, data in statuses]
 
 
 @app.post("/api/requests/internal", status_code=202)
-async def create_internal_request(
-    req: InternalRequestModel,
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
-    # serialize Pydantic model to JSON string
+async def create_internal_request(req: InternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
@@ -138,17 +131,12 @@ async def create_internal_request(
             "status": "pending",
         }
     )
-    # await redis.xadd(ELEVATOR_REQUESTS_STREAM, request_data)
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
-async def create_external_request(
-    req: ExternalRequestModel,
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
-    # serialize Pydantic model to JSON string
+async def create_external_request(req: ExternalRequestModel):
     request_data = req.model_dump()
     request_data.update(
         {
@@ -158,80 +146,63 @@ async def create_external_request(
             "status": "pending",
         }
     )
-
-    # Streams should accept Python dict
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.get("/api/elevators", status_code=200)
-async def get_elevators(redis: Redis = Depends(get_redis)):
-    return {"elevators": await fetch_elevator_statuses(redis)}
+async def get_elevators():
+    """Get current status of all elevators."""
+    return {"elevators": await fetch_elevator_statuses()}
 
 
 @app.get("/api/requests", status_code=200)
-async def get_stream_requests(
-    event_stream: EventStreamClient = Depends(get_event_stream),
-):
+async def get_stream_requests():
     """Retrieve all entries from the elevator requests stream"""
     entries = await event_stream.range(ELEVATOR_REQUESTS_STREAM, "-", "+")
     requests = []
     for msg_id, fields in entries:
-        # include message ID with each entry
-        entry = {"id": msg_id}
-        entry.update(fields)
+        entry = {"id": msg_id, **fields}
         requests.append(entry)
     return {"requests": requests}
 
 
 @app.delete("/api/requests", status_code=200)
 async def trim_stream(
-    min_id: Optional[str] = Query(None, description="Exclusive start ID; entries with ID < min_id will be removed"),
+    min_id: Optional[str] = Query(
+        None, description="Exclusive start ID; entries with ID < min_id will be removed"
+    ),
     maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
-    event_stream: EventStreamClient = Depends(get_event_stream),
 ):
     """
     Trim the elevator requests stream using XTRIM.
     Only one of min_id or maxlen must be provided.
     """
-    # Enforce exclusive parameters
-    if (min_id is None and maxlen is None) or (min_id is not None and maxlen is not None):
-        raise HTTPException(status_code=400, detail="Provide exactly one of min_id or maxlen")
-    # Trim by count
-    if maxlen is not None:
-        trimmed_count = await event_stream.trim(
-            ELEVATOR_REQUESTS_STREAM,
-            maxlen=maxlen,
-            approximate=approximate,
-        )
-    else:
-        # Trim by ID
-        trimmed_count = await event_stream.trim(
-            ELEVATOR_REQUESTS_STREAM,
-            minid=min_id,
-            approximate=approximate,
-        )
+    trimmed_count = await event_stream.trim(
+        ELEVATOR_REQUESTS_STREAM,
+        min_id=min_id,
+        maxlen=maxlen,
+        approximate=approximate,
+    )
     return {"trimmed": trimmed_count}
 
 
-@app.get("/elevator-table", response_class=HTMLResponse)
-async def elevator_table(
-    request: Request,
-    redis: Redis = Depends(get_redis),
-):
-    elevators = await fetch_elevator_statuses(redis)
+@app.get("/elevator-table")
+async def elevator_table(request: Request):
+    """Render the elevator table view."""
+    elevators = await fetch_elevator_statuses()
     return templates.TemplateResponse(
-        "elevator_table.html", {"request": request, "elevators": elevators}
+        "elevator_table.html",
+        {"request": request, "elevators": elevators, "num_floors": NUM_FLOORS},
     )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(
-    request: Request,
-    redis: Redis = Depends(get_redis),
-):
-    elevators = await fetch_elevator_statuses(redis)
+@app.get("/")
+async def index(request: Request):
+    """Render the main index page."""
+    elevators = await fetch_elevator_statuses()
     return templates.TemplateResponse(
-        "index.html", {"request": request, "elevators": elevators}
+        "index.html",
+        {"request": request, "elevators": elevators},
     )

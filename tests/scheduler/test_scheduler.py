@@ -1,129 +1,129 @@
-import asyncio
 import json
 
-import pytest
-from redis.exceptions import ConnectionError, RedisError
-
-from src.config import ELEVATOR_STATUS
-from src.models.elevator import ElevatorStatus
-from src.models.request import Direction, ExternalRequest
-from src.scheduler.scheduler import Scheduler, redis_xreadgroup_with_ack
+from src.config import NUM_ELEVATORS
+from src.models.request import Direction, ExternalRequest, InternalRequest
+from src.scheduler.scheduler import Scheduler
 
 
-async def test_scheduler_handles_external_request(redis_client, elevators):
+async def test_scheduler_handles_external_request(
+    mock_scheduler_cache, mock_scheduler_pubsub
+):
     # Arrange
     scheduler = Scheduler(id="test-1")
-    scheduler.redis_client = redis_client
 
-    # Set initial elevator state
-    initial_state = {
-        "id": 1,
-        "current_floor": 1,
-        "status": "idle",
-        "door_status": "closed",
-        "destinations": []
-    }
-    await redis_client.set(
-        ELEVATOR_STATUS.format(1),
-        json.dumps(initial_state)
-    )
+    # Mock cache.get to return initial elevator states for all NUM_ELEVATORS
+    mock_elevator_states = [
+        {
+            "id": i,
+            "current_floor": 1,
+            "status": "idle",
+            "door_status": "closed",
+            "destinations": [],
+        }
+        for i in range(1, NUM_ELEVATORS + 1)
+    ]
+    mock_scheduler_cache.get.side_effect = mock_elevator_states
+    mock_scheduler_cache.set.return_value = None  # Mock set as well
+
+    # Mock pubsub.publish
+    mock_scheduler_pubsub.publish.return_value = None
 
     await scheduler._load_elevator_states()
 
-    request = ExternalRequest(
-        floor=3,
-        direction=Direction.UP
-    )
+    request = ExternalRequest(floor=3, direction=Direction.UP)
 
     # Act
-    elevator_id = await scheduler._select_best_elevator_for_external(request)
+    await scheduler._handle_external_request(request)
 
     # Assert
-    assert elevator_id is not None
-    assert isinstance(elevator_id, int)
-    assert elevator_id == 1
+    mock_scheduler_pubsub.publish.assert_called_once()
 
 
-async def test_scheduler_handles_connection_retry(redis_client, mocker):
+async def test_scheduler_handles_internal_request(
+    mock_scheduler_cache, mock_scheduler_pubsub
+):
     # Arrange
     scheduler = Scheduler(id="test-1")
-    scheduler.redis_client = redis_client
 
-    # Mock Redis xreadgroup to simulate persistent connection errors
-    mock_xreadgroup = mocker.patch.object(redis_client, 'xreadgroup')
+    # Mock cache.get to return initial elevator states for all NUM_ELEVATORS
+    mock_elevator_states = [
+        {
+            "id": i,
+            "current_floor": 1,
+            "status": "idle",
+            "door_status": "closed",
+            "destinations": [],
+        }
+        for i in range(1, NUM_ELEVATORS + 1)
+    ]
+    mock_scheduler_cache.get.side_effect = mock_elevator_states
+    mock_scheduler_cache.set.return_value = None  # Mock set as well
 
-    # Create a list of futures that raise ConnectionError
-    async def raise_error(*args, **kwargs):
-        raise ConnectionError("Test connection error")
+    # Mock pubsub.publish
+    mock_scheduler_pubsub.publish.return_value = None
 
-    mock_xreadgroup.side_effect = raise_error
+    await scheduler._load_elevator_states()
 
-    # Mock Redis xack for success
-    mock_xack = mocker.patch.object(redis_client, 'xack')
-    mock_xack.return_value = True
+    request = InternalRequest(elevator_id=1, destination_floor=5)
 
-    # Act & Assert - Should retry and eventually fail
-    with pytest.raises(ConnectionError):
-        async with redis_xreadgroup_with_ack(
-            redis_client,
-            "test-group",
-            "test-consumer",
-            {"test-stream": ">"},
-            auto_ack=False,
-            max_retries=2
-        ) as stream_entries:
-            pass
+    # Act
+    await scheduler._handle_internal_request(request)
 
-    # Verify number of retry attempts
-    assert mock_xreadgroup.call_count == 2
-    assert not mock_xack.called  # Should not reach ack step due to persistent error
+    # Assert
+    mock_scheduler_pubsub.publish.assert_called_once()
+    args, kwargs = mock_scheduler_pubsub.publish.call_args
+    assert args[0] == f"elevator:commands:{request.elevator_id}"
+    published_command = json.loads(args[1])
+    assert published_command["command"] == "add_destination"
+    assert published_command["floor"] == 5
 
 
-async def test_scheduler_calculates_correct_scores(redis_client):
+async def test_scheduler_calculates_correct_scores(mock_scheduler_cache):
     # Arrange
     scheduler = Scheduler(id="test-1")
-    scheduler.redis_client = redis_client
 
-    # Set up elevator states
-    states = {
-        1: {
+    # Set up elevator states for the mock cache
+    mock_scheduler_cache.get.side_effect = [
+        # State for elevator 1
+        {
             "id": 1,
             "current_floor": 1,
             "status": "idle",
             "door_status": "closed",
-            "destinations": []
+            "destinations": [],
         },
-        2: {
+        # State for elevator 2
+        {
             "id": 2,
             "current_floor": 5,
             "status": "moving_up",
             "door_status": "closed",
-            "destinations": [6]
+            "destinations": [6],
         },
-        3: {  # Added elevator 3 to match NUM_ELEVATORS
+        # State for elevator 3
+        {
             "id": 3,
             "current_floor": 10,
             "status": "idle",
             "door_status": "closed",
-            "destinations": []
-        }
-    }
-
-    for elevator_id, state in states.items():
-        await redis_client.set(
-            ELEVATOR_STATUS.format(elevator_id),
-            json.dumps(state)
-        )
+            "destinations": [],
+        },
+    ]
+    mock_scheduler_cache.set.return_value = None
 
     await scheduler._load_elevator_states()
 
-    request = ExternalRequest(
-        floor=2,
-        direction=Direction.UP
-    )
+    request = ExternalRequest(floor=2, direction=Direction.UP)
 
     # Act
     elevator_id = await scheduler._select_best_elevator_for_external(request)
 
     # Assert - Should select elevator 1 as it's idle and closer
     assert elevator_id == 1
+
+    # Test another scenario
+    request = ExternalRequest(floor=6, direction=Direction.UP)
+    elevator_id = await scheduler._select_best_elevator_for_external(request)
+
+    # Assert - Should select elevator 2 as it's on the way
+    assert elevator_id == 2
