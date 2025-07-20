@@ -7,10 +7,14 @@ with support for environment variable overrides.
 import os
 from typing import Dict, Any, Optional
 
+# Get Redis host and port from environment variables
+REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
+
 # Default cache settings
 DEFAULT_CACHE_SETTINGS = {
     "BACKEND": "redis",
-    "LOCATION": "redis://localhost:6379/0",
+    "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/0",
     "OPTIONS": {
         "socket_timeout": 5.0,
         "socket_connect_timeout": 5.0,
@@ -104,8 +108,8 @@ def get_redis_params(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     
     # Fall back to individual parameters
     params = {
-        "host": "localhost",
-        "port": 6379,
+        "host": REDIS_HOST,
+        "port": REDIS_PORT,
         "db": 0,
         "password": None,
     }
