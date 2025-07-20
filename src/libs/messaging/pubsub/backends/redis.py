@@ -1,5 +1,6 @@
 """Redis Pub/Sub client implementation."""
 
+import os
 import json
 import logging
 from typing import Any, Dict, Optional, Union
@@ -19,8 +20,8 @@ class RedisPubSubBackend(PubSubClient):
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6379,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
         db: int = 0,
         password: Optional[str] = None,
         **kwargs: Any,
@@ -30,8 +31,8 @@ class RedisPubSubBackend(PubSubClient):
         self._pubsub: Optional[RedisPubSub] = None
         self._subscriptions = set()
         self._client_params = {
-            "host": host,
-            "port": port,
+            "host": host or os.environ.get("REDIS_HOST", "localhost"),
+            "port": port or int(os.environ.get("REDIS_PORT", 6379)),
             "db": db,
             "password": password,
             "decode_responses": True,
