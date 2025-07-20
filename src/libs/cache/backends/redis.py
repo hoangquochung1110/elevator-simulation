@@ -2,6 +2,7 @@
 Redis cache backend implementation.
 """
 
+import os
 import json
 import logging
 from typing import Any, Dict, List, Optional, TypeVar
@@ -23,8 +24,8 @@ class RedisBackend(BaseCacheBackend):
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6379,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
         db: int = 0,
         password: Optional[str] = None,
         socket_timeout: Optional[float] = 5.0,
@@ -50,8 +51,8 @@ class RedisBackend(BaseCacheBackend):
         """
         self._client: Optional[Redis] = None
         self._client_params = {
-            "host": host,
-            "port": port,
+            "host": host or os.environ.get("REDIS_HOST", "localhost"),
+            "port": port or int(os.environ.get("REDIS_PORT", 6379)),
             "db": db,
             "password": password,
             "socket_timeout": socket_timeout,
@@ -59,6 +60,7 @@ class RedisBackend(BaseCacheBackend):
             "socket_keepalive": socket_keepalive,
             "socket_keepalive_options": socket_keepalive_options or {},
             "max_connections": max_connections,
+            "decode_responses": True,
             **kwargs,
         }
 

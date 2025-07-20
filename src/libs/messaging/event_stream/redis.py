@@ -1,6 +1,7 @@
 """
 Redis Streams implementation of the Event Stream client interface.
 """
+import os
 import json
 from typing import Any, Dict, List, Optional
 
@@ -17,15 +18,22 @@ class RedisStreamClient(EventStreamClient):
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6379,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
         db: int = 0,
         password: Optional[str] = None,
         **kwargs: Any,
     ):
         """Initialize with Redis connection parameters."""
+        redis_host = host or os.environ.get("REDIS_HOST", "localhost")
+        redis_port = port or int(os.environ.get("REDIS_PORT", 6379))
         self.redis = Redis(
-            host=host, port=port, db=db, password=password, decode_responses=True, **kwargs
+            host=redis_host,
+            port=redis_port,
+            db=db,
+            password=password,
+            decode_responses=True,
+            **kwargs,
         )
 
     async def publish(self, stream: str, data: Dict[str, Any]) -> str:
