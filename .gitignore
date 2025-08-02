@@ -44,6 +44,10 @@ dump.rdb
 *.rdb
 redis-data/
 
+# Logs
+logs/
+*.log
+
 # IDE
 .idea/
 .vscode/

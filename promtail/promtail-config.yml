@@ -1,0 +1,122 @@
+# Server configuration for Promtail's HTTP and gRPC servers
+# - http_listen_port: Port for the HTTP server (for health checks and metrics)
+# - grpc_listen_port: Port for the gRPC server (0 = disabled)
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Positions file tracks the current read position in each log file
+# - This ensures Promtail can resume from the last position after a restart
+positions:
+  filename: /tmp/positions.yaml
+
+# Clients define where to send the logs (Loki server)
+# - Multiple clients can be configured for high availability
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Job for collecting Docker container logs
+  # - Monitors all container log files in the Docker directory
+  # - Uses JSON parsing to extract container metadata
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost  # Target identifier (used in metrics)
+        labels:
+          job: containerlogs  # Label for these logs in Loki
+          __path__: /var/lib/docker/containers/*/*.log  # Path pattern to monitor
+    # Pipeline stages process each log entry in sequence
+    pipeline_stages:
+      # First stage: Parse the JSON log line from Docker
+      - json:
+          expressions:
+            output: log      # The actual log message
+            stream: stream   # stdout/stderr
+            attrs:           # Container attributes
+      
+      # Second stage: Parse the attributes JSON object
+      - json:
+          expressions:
+            tag:             # Container name and ID
+          source: attrs      # Source field from previous stage
+      
+      # Third stage: Extract container name from the tag
+      - regex:
+          expression: (?P<container_name>(?:[^|])+)
+          source: tag
+      
+      # Fourth stage: Parse the timestamp
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+      
+      # Fifth stage: Add labels for filtering in Loki
+      - labels:
+          stream:             # stdout/stderr
+          container_name:     # Name of the container
+      
+      # Final stage: Set the output message
+      - output:
+          source: output
+
+  # Job for collecting application plain text logs
+  # - Monitors .txt files in the /app/logs directory
+  # - Uses regex to parse log format: "YYYY-MM-DD HH:MM:SS LEVEL message"
+  - job_name: app_text_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: app_logs
+          __path__: /app/logs/*.txt  # Monitor all .txt files
+    
+    # Pipeline for processing plain text logs
+    pipeline_stages:
+      # First stage: Parse log line using regex
+      - regex:
+          # Pattern breakdown:
+          # ^ - Start of line
+          # (?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - Captures timestamp
+          # (?P<level>\w+) - Captures log level (INFO, ERROR, etc.)
+          # \s+ - One or more whitespace characters
+          # (?P<message>.*) - Captures the rest of the line as the message
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<level>\w+)\s+(?P<message>.*)'
+      
+      # Second stage: Parse the timestamp
+      - timestamp:
+          format: '2006-01-02 15:04:05'  # Go reference time format
+          source: timestamp               # Field from regex capture
+      
+      # Third stage: Add log level as a label for filtering
+      - labels:
+          level:  # This creates a label for each log level
+
+  # Job for collecting application JSON logs
+  # - Monitors .json files in the /app/logs directory
+  # - Expects logs in JSON format with timestamp, level, and message fields
+  - job_name: app_json_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: app_json_logs  # Different job name for JSON logs
+          __path__: /app/logs/*.json  # Monitor all .json files
+    
+    # Pipeline for processing JSON logs
+    pipeline_stages:
+      # First stage: Parse the JSON log line
+      - json:
+          expressions:
+            timestamp: timestamp  # Maps to the 'timestamp' field in JSON
+            level: level          # Maps to the 'level' field in JSON
+            message: message      # Maps to the 'message' field in JSON
+      
+      # Second stage: Parse the timestamp (expected in RFC3339 format)
+      - timestamp:
+          format: RFC3339         # Standard timestamp format
+          source: timestamp       # Field from JSON
+      
+      # Third stage: Add log level as a label for filtering
+      - labels:
+          level:  # Creates a label for each log level

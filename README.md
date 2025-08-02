@@ -93,6 +93,162 @@ Used for real-time communication between components:
    - Real controllers track load and may skip further stops when at capacity.
 6. No priority handling
 
+## Logging with Loki and Promtail
+
+This project uses Grafana Loki for log aggregation and Promtail for log collection, providing a powerful and efficient logging solution.
+
+### Prerequisites
+- Docker and Docker Compose installed
+- Ports 3100 (Loki) and 9080 (Promtail) available
+
+### 1. Starting the Logging Services
+
+To start the logging infrastructure along with the main application:
+
+```bash
+docker-compose up -d loki promtail
+```
+
+To include the entire application stack:
+
+```bash
+docker-compose up -d
+```
+
+### 2. Accessing Logs
+
+#### Option A: Grafana (Recommended)
+1. Add Grafana to your `docker-compose.yml`:
+   ```yaml
+   grafana:
+     image: grafana/grafana:latest
+     ports:
+       - "3000:3000"
+     volumes:
+       - grafana-storage:/var/lib/grafana
+     networks:
+       - logging
+     depends_on:
+       - loki
+   ```
+2. Access Grafana at `http://localhost:3000`
+3. Add Loki as a data source:
+   - URL: `http://loki:3100`
+   - Click "Save & test"
+4. Explore logs using the "Explore" tab
+
+#### Option B: Loki API
+Query logs directly using the Loki API:
+```bash
+# Get recent logs
+curl -G http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={job="app_logs"}' \
+  --data-urlencode 'limit=50' | jq .
+```
+
+### 3. Log Collection Details
+
+- **Application Logs**: Stored in `./logs/` directory
+  - Supports both plain text (`*.log`) and JSON (`*.json`) formats
+  - Automatically collected and parsed by Promtail
+
+- **Container Logs**: Collected from all running containers
+  - Includes logs from all services in the stack
+
+### 4. Log Querying in Grafana
+
+Use LogQL to query logs in Grafana:
+
+```sql
+# Show all application logs
+{job="app_logs"}
+
+# Filter by log level
+{job="app_logs"} |~ "level=error"
+
+# Search for specific terms
+{job=~"app_logs"} |~ "error"
+
+# Show container logs
+{job="containerlogs"}
+```
+
+### 5. Log Rotation and Retention
+
+- Logs are stored in the `loki_data` volume
+- Default retention: 30 days (configurable in `loki/loki-config.yml`)
+- To clean up old logs:
+  ```bash
+  docker-compose exec loki logcli --addr=http://loki:3100 --org-id=0 delete --older-than=720h --query='{job=~"app_logs|containerlogs"}'
+  ```
+
+### 6. Exploring Logs in Grafana
+
+Grafana provides a powerful interface for exploring and visualizing your logs. Here's how to get started:
+
+#### Accessing the Explore View
+1. Click on the "Explore" icon (compass) in the left sidebar
+2. Select "Loki" as your data source from the dropdown at the top
+
+#### Useful LogQL Queries
+
+**View all application logs**
+```
+{job="app_logs"}
+```
+
+**Filter by log level**
+```
+{job="app_logs"} | json | level = "ERROR"
+```
+
+**Search for specific terms**
+```
+{job="app_logs"} |~ "elevator"
+```
+
+**View logs from the last 15 minutes**
+```
+{job="app_logs"} | json | __error__ = ""
+```
+
+**Count logs by level**
+```
+sum(count_over_time({job="app_logs"} | json | __error__ = "" [5m])) by (level)
+```
+
+#### Tips for Effective Log Exploration
+- Use the time range selector in the top right to adjust the time window
+- Click on log labels to filter by specific values
+- Hover over log lines to see additional details
+- Use the "Split" button to compare different queries side by side
+- Save frequently used queries as dashboard variables for quick access
+
+#### Creating Dashboards
+1. Click on "Dashboards" in the left sidebar
+2. Click "New Dashboard"
+3. Add a new panel and select the Loki data source
+4. Use LogQL queries to create visualizations of your log data
+
+#### Example Dashboard Panels
+1. **Error Rate**
+   ```
+   sum(count_over_time({job="app_logs"} | json | level = "ERROR" [5m]))
+   ```
+   Visualization: Time series with a 5-minute step
+
+2. **Log Volume by Level**
+   ```
+   sum(count_over_time({job="app_logs"} | json | __error__ = "" [5m])) by (level)
+   ```
+   Visualization: Stacked bars with legend toggles
+
+3. **Top Error Messages**
+   ```
+   sum(count_over_time({job="app_logs"} | json | level = "ERROR" [1h])) by (message)
+   ```
+   Visualization: Table sorted by count
+
 ## CI/CD Setup
 
 The CI/CD pipeline, defined in `.github/workflows/cicd.yml`, automates the building, testing, and deployment of this application to AWS ECS.
