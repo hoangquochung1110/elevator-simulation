@@ -16,6 +16,123 @@ provider "aws" {
 
 data "aws_availability_zones" "available" {}
 
+################################################################################
+# FluentBit Sidecar Container Definitions
+################################################################################
+
+locals {
+  # FluentBit sidecar definition for webapp
+  fluentbit_webapp = {
+    name  = "fluentbit"
+    image = "public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.12"
+
+    environment = [
+      {
+        name  = "AWS_REGION"
+        value = var.region
+      },
+      {
+        name  = "SERVICE_NAME"
+        value = "webapp"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "webapp"
+      }
+    }
+
+    secrets = [
+      {
+        name      = "FLUENTBIT_CONFIG"
+        valueFrom = aws_ssm_parameter.fluentbit_config_webapp.arn
+      }
+    ]
+
+    essential = false
+    cpu       = 128
+    memory    = 256
+  }
+
+  # FluentBit sidecar definition for scheduler
+  fluentbit_scheduler = {
+    name  = "fluentbit"
+    image = "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
+
+    environment = [
+      {
+        name  = "AWS_REGION"
+        value = var.region
+      },
+      {
+        name  = "SERVICE_NAME"
+        value = "scheduler"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "scheduler"
+      }
+    }
+
+    secrets = [
+      {
+        name      = "FLUENTBIT_CONFIG"
+        valueFrom = aws_ssm_parameter.fluentbit_config_scheduler.arn
+      }
+    ]
+
+    essential = false
+    cpu       = 128
+    memory    = 256
+  }
+
+  # FluentBit sidecar definition for controller
+  fluentbit_controller = {
+    name  = "fluentbit"
+    image = "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
+
+    environment = [
+      {
+        name  = "AWS_REGION"
+        value = var.region
+      },
+      {
+        name  = "SERVICE_NAME"
+        value = "controller"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "controller"
+      }
+    }
+
+    secrets = [
+      {
+        name      = "FLUENTBIT_CONFIG"
+        valueFrom = aws_ssm_parameter.fluentbit_config_controller.arn
+      }
+    ]
+
+    essential = false
+    cpu       = 128
+    memory    = 256
+  }
+}
+
 locals {
   name     = "redis-pubsub-101"
   vpc_cidr = "10.0.0.0/16"
@@ -65,6 +182,51 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Custom policy for CloudWatch Logs
+resource "aws_iam_role_policy" "fluentbit_cloudwatch_policy" {
+  name = "fluentbit-cloudwatch-policy"
+  role = aws_iam_role.ecs_task_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Add SSM permissions to existing execution role
+resource "aws_iam_role_policy" "ssm_parameter_access" {
+  name = "ssm-parameter-access"
+  role = aws_iam_role.ecs_task_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Resource = [
+          "arn:aws:ssm:${var.region}:*:parameter/ecs/fluentbit/config/*"
+        ]
+      }
+    ]
+  })
+}
+
 ################################################################################
 # Security Group for ECS Services
 ################################################################################
@@ -101,6 +263,13 @@ resource "aws_security_group" "ecs_service_private" {
   description = "Security Group for containers in private subnets"
   vpc_id      = module.vpc.vpc_id
 
+  ingress {
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb.id]
+  }
+
   egress {
     from_port   = 80
     to_port     = 80
@@ -129,17 +298,17 @@ resource "aws_security_group" "ecs_service_private" {
 # CloudWatch Log Groups
 ################################################################################
 
-resource "aws_cloudwatch_log_group" "restapi" {
-  name = "/ecs/webapp"
-}
+# resource "aws_cloudwatch_log_group" "restapi" {
+#   name = "/ecs/webapp"
+# }
 
-resource "aws_cloudwatch_log_group" "controller" {
-  name = "/ecs/controller"
-}
+# resource "aws_cloudwatch_log_group" "controller" {
+#   name = "/ecs/controller"
+# }
 
-resource "aws_cloudwatch_log_group" "scheduler" {
-  name = "/ecs/scheduler"
-}
+# resource "aws_cloudwatch_log_group" "scheduler" {
+#   name = "/ecs/scheduler"
+# }
 
 
 ################################################################################
