@@ -1,6 +1,7 @@
 name: Build and Push Images to AWS ECR
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
