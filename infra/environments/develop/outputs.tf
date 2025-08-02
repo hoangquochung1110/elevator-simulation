@@ -41,3 +41,18 @@ output "alb_info" {
     dns_name = aws_lb.main.dns_name
   }
 }
+
+output "webapp_image_uri" {
+  description = "The image URI for the webapp service"
+  value       = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
+}
+
+output "scheduler_image_uri" {
+  description = "The image URI for the scheduler service"
+  value       = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
+}
+
+output "controller_image_uri" {
+  description = "The image URI for the controller service"
+  value       = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
+}
