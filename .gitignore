@@ -78,3 +78,6 @@ bruno.json
 .terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
+
+# Grafana
+loki/

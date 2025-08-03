@@ -4,23 +4,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
+import structlog
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..config import (
-    ELEVATOR_REQUESTS_STREAM,
-    ELEVATOR_STATUS,
-    NUM_ELEVATORS,
-    NUM_FLOORS,
-    REDIS_DB,
-    REDIS_HOST,
-    REDIS_PASSWORD,
-    REDIS_PORT,
-    configure_logging,
-)
+from ..config import (ELEVATOR_REQUESTS_STREAM, ELEVATOR_STATUS, NUM_ELEVATORS,
+                      NUM_FLOORS, REDIS_DB, REDIS_HOST, REDIS_PASSWORD,
+                      REDIS_PORT, configure_logging)
 from ..libs.cache import cache
 from ..libs.cache import close as close_cache
 from ..libs.cache import init_cache
@@ -28,7 +21,7 @@ from ..libs.messaging.event_stream import close as close_event_stream
 from ..libs.messaging.event_stream import event_stream, init_event_stream
 
 load_dotenv()  # take environment variables
-
+logger = structlog.get_logger(__name__)
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
@@ -96,7 +89,6 @@ class ExternalRequestModel(BaseModel):
 
 class InternalRequestModel(BaseModel):
     """Model for internal elevator requests (destination buttons)."""
-
     elevator_id: int = Field(
         ..., ge=1, le=NUM_ELEVATORS, description="ID of the elevator"
     )
@@ -122,6 +114,8 @@ async def fetch_elevator_statuses() -> list[dict]:
 
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
+    logger.info("create external request")
+
     request_data = req.model_dump()
     request_data.update(
         {
@@ -137,6 +131,8 @@ async def create_internal_request(req: InternalRequestModel):
 
 @app.post("/api/requests/external", status_code=202)
 async def create_external_request(req: ExternalRequestModel):
+    logger.info("create external request")
+
     request_data = req.model_dump()
     request_data.update(
         {
@@ -153,6 +149,7 @@ async def create_external_request(req: ExternalRequestModel):
 @app.get("/api/elevators", status_code=200)
 async def get_elevators():
     """Get current status of all elevators."""
+    logger.info("get_elevators")
     return {"elevators": await fetch_elevator_statuses()}
 
 
@@ -172,7 +169,9 @@ async def trim_stream(
     min_id: Optional[str] = Query(
         None, description="Exclusive start ID; entries with ID < min_id will be removed"
     ),
-    maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
+    maxlen: Optional[int] = Query(
+        None, description="Maximum number of entries to keep"
+    ),
     approximate: bool = Query(True, description="Whether to use approximate trimming"),
 ):
     """
