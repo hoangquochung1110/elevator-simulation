@@ -1,25 +1,17 @@
-resource "aws_cloudwatch_log_group" "webapp_logs" {
-  name              = "/ecs/webapp"
-  retention_in_days = 30
-  tags              = var.tags
+data "aws_cloudwatch_log_group" "webapp_logs" {
+  name = "/ecs/webapp"
 }
 
-resource "aws_cloudwatch_log_group" "scheduler_logs" {
-  name              = "/ecs/scheduler"
-  retention_in_days = 30
-  tags              = var.tags
+data "aws_cloudwatch_log_group" "scheduler_logs" {
+  name = "/ecs/scheduler"
 }
 
-resource "aws_cloudwatch_log_group" "controller_logs" {
-  name              = "/ecs/controller"
-  retention_in_days = 30
-  tags              = var.tags
+data "aws_cloudwatch_log_group" "controller_logs" {
+  name = "/ecs/controller"
 }
 
-resource "aws_cloudwatch_log_group" "fluentbit_logs" {
-  name              = "/ecs/fluentbit"
-  retention_in_days = 7
-  tags              = var.tags
+data "aws_cloudwatch_log_group" "fluentbit_logs" {
+  name = "/ecs/fluentbit"
 }
 
 ################################################################################
@@ -31,7 +23,7 @@ resource "aws_ssm_parameter" "fluentbit_config_webapp" {
   type = "String"
   value = templatefile("${path.module}/fluentbit.conf", {
     region         = var.region
-    log_group_name = aws_cloudwatch_log_group.webapp_logs.name
+    log_group_name = data.aws_cloudwatch_log_group.webapp_logs.name
     service_name   = "webapp"
   })
   tags = var.tags
@@ -42,7 +34,7 @@ resource "aws_ssm_parameter" "fluentbit_config_scheduler" {
   type = "String"
   value = templatefile("${path.module}/fluentbit.conf", {
     region         = var.region
-    log_group_name = aws_cloudwatch_log_group.scheduler_logs.name
+    log_group_name = data.aws_cloudwatch_log_group.scheduler_logs.name
     service_name   = "scheduler"
   })
   tags = var.tags
@@ -53,7 +45,7 @@ resource "aws_ssm_parameter" "fluentbit_config_controller" {
   type = "String"
   value = templatefile("${path.module}/fluentbit.conf", {
     region         = var.region
-    log_group_name = aws_cloudwatch_log_group.controller_logs.name
+    log_group_name = data.aws_cloudwatch_log_group.controller_logs.name
     service_name   = "controller"
   })
   tags = var.tags

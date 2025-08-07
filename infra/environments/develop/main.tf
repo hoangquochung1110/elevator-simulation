@@ -40,7 +40,7 @@ locals {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-group         = data.aws_cloudwatch_log_group.fluentbit_logs.name
         awslogs-region        = var.region
         awslogs-stream-prefix = "webapp"
       }
@@ -77,7 +77,7 @@ locals {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-group         = data.aws_cloudwatch_log_group.fluentbit_logs.name
         awslogs-region        = var.region
         awslogs-stream-prefix = "scheduler"
       }
@@ -114,7 +114,7 @@ locals {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-group         = aws_cloudwatch_log_group.fluentbit_logs.name
+        awslogs-group         = data.aws_cloudwatch_log_group.fluentbit_logs.name
         awslogs-region        = var.region
         awslogs-stream-prefix = "controller"
       }
@@ -130,6 +130,34 @@ locals {
     essential = false
     cpu       = 128
     memory    = 256
+  }
+
+  # Common OTEL collector sidecar configuration
+  otel_collector = {
+    name      = "aws-otel-collector"
+    image     = "amazon/aws-otel-collector"
+    command   = ["--config", "/etc/otel/collector-config.yaml"]
+    essential = true
+    cpu       = 128
+    memory    = 256
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = "ecs/ecs-aws-otel-sidecar-collector"
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs"
+        awslogs-create-group  = "true"
+      }
+    }
+
+    healthCheck = {
+      command     = ["/healthcheck"]
+      interval    = 5
+      timeout     = 6
+      retries     = 5
+      startPeriod = 1
+    }
   }
 }
 
@@ -227,6 +255,39 @@ resource "aws_iam_role_policy" "ssm_parameter_access" {
   })
 }
 
+# Permission for ADOT Collector to publish app metrics
+# and container metrics to AWS CloudWatch and sending app traces to AWS X-Ray.
+resource "aws_iam_role_policy" "aws_distro_opentelemetry_policy" {
+  name = "aws-distro-opentelemetry-policy"
+  role = aws_iam_role.ecs_task_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:PutLogEvents",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups",
+          "logs:PutRetentionPolicy",
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+          "xray:GetSamplingStatisticSummaries",
+          "cloudwatch:PutMetricData",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeTags",
+          "ssm:GetParameters"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
 ################################################################################
 # Security Group for ECS Services
 ################################################################################

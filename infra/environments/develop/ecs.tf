@@ -121,6 +121,26 @@ resource "aws_ecs_task_definition" "webapp" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+    },
     {
       name      = "webapp"
       image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
@@ -145,13 +165,12 @@ resource "aws_ecs_task_definition" "webapp" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.webapp_logs.name
+          awslogs-group         = data.aws_cloudwatch_log_group.webapp_logs.name
           awslogs-region        = var.region
           awslogs-stream-prefix = "app"
         }
       }
-    },
-    local.fluentbit_webapp # FluentBit sidecar from fluentbit-sidecar.tf
+    }
   ])
 }
 
@@ -165,6 +184,26 @@ resource "aws_ecs_task_definition" "scheduler" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+    },
     {
       name      = "scheduler"
       image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
@@ -184,7 +223,7 @@ resource "aws_ecs_task_definition" "scheduler" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.scheduler_logs.name
+          awslogs-group         = data.aws_cloudwatch_log_group.scheduler_logs.name
           awslogs-region        = var.region
           awslogs-stream-prefix = "app"
         }
@@ -204,6 +243,26 @@ resource "aws_ecs_task_definition" "controller" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+    },
     {
       name      = "controller"
       image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
@@ -223,7 +282,7 @@ resource "aws_ecs_task_definition" "controller" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.controller_logs.name
+          awslogs-group         = data.aws_cloudwatch_log_group.controller_logs.name
           awslogs-region        = var.region
           awslogs-stream-prefix = "app"
         }
