@@ -10,7 +10,6 @@ from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
-
 from src.libs.cache import cache
 from src.libs.messaging.event_stream import event_stream
 from src.config import (
@@ -35,6 +34,17 @@ if not logger.handlers:
 
 load_dotenv()  # take environment variables
 
+# Configure logging to work with OpenTelemetry auto-instrumentation
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+formatter = logging.Formatter(
+    '{"message": "%(message)s", "log_level": "%(levelname)s"}'
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
@@ -57,6 +67,8 @@ async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
             }
             await cache.set(key, initial_state)
     try:
+        logger.error("Service started")
+        logger.error("Hello world")
         yield
     finally:
         # Cleanup
@@ -109,6 +121,7 @@ async def fetch_elevator_statuses() -> list[dict]:
         key = ELEVATOR_STATUS.format(i)
         data = await cache.get(key)
         if data:
+            logger.info(msg=data)
             statuses.append((i, data))
     # Sort by elevator ID
     statuses.sort(key=lambda x: x[0])

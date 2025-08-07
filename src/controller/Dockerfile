@@ -2,8 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv (keeping consistent with your webapp Dockerfile)
+# Install uv
 RUN pip install --no-cache-dir uv
+
+# Init venv
+RUN uv venv
 
 # Copy only dependency files first
 COPY pyproject.toml .
@@ -19,4 +22,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY ./src /app/src
 
 # Production command
-CMD ["python", "-m", "src.controller.main"]
+CMD ["uv", "run", "opentelemetry-instrument", "python", "-m", "src.controller.main"]

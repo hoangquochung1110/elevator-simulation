@@ -7,14 +7,17 @@ It listens to elevator requests and assigns them to the most appropriate elevato
 """
 
 import asyncio
-import signal
 import logging
+import signal
 from contextlib import asynccontextmanager
 
 from src.scheduler.factory import create_scheduler
 
 # Set up graceful shutdown
 shutdown_event = asyncio.Event()
+
+# Configure logging to work with OpenTelemetry auto-instrumentation
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 

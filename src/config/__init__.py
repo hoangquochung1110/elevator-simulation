@@ -20,13 +20,10 @@ load_dotenv()
 NUM_FLOORS = 10
 NUM_ELEVATORS = 3
 
-REDIS_HOST = os.getenv(
-    "REDIS_HOST",
-    "redis-pubsub-101-alb-1732433117.ap-southeast-1.elb.amazonaws.com",
-)
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
+REDIS_DB = int(os.getenv('REDIS_DB', '0'))
 
 __all__ = [
     "ELEVATOR_COMMANDS",
