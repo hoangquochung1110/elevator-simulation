@@ -69,8 +69,7 @@ async def main():
         logger.info("All controllers stopped")
 
 
-def run():
-    """Run the controller service."""
+if __name__ == "__main__":
     configure_logging()
 
     try:
@@ -82,7 +81,3 @@ def run():
         raise
     finally:
         logger.info("Service shutdown complete")
-
-
-if __name__ == "__main__":
-    run()

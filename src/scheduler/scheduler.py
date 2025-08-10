@@ -25,11 +25,9 @@ class Scheduler:
     def __init__(
         self,
         id: str,
-        config: Optional[Dict] = None
     ):
         self.id = id
         self.consumer_id = f"scheduler-{id}"
-        self.config = config or {}
         self.elevator_states: Dict[int, Elevator] = {}
         self._running: bool = False
         self.logger = logger
