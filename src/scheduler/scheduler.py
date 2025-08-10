@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 import structlog
 
@@ -81,30 +81,6 @@ class Scheduler:
             except Exception as e:
                 self.logger.error("Error in scheduler loop", error=str(e), exc_info=True)
                 await asyncio.sleep(5)  # Wait before retrying
-
-    async def _listen_for_commands(self) -> None:
-        """Continuously listen for commands on the scheduler command channel."""
-        try:
-            async for message in self.pubsub.listen():
-                if not self._running:
-                    break
-                # The message is already a decoded dictionary from the listen method
-                await self._handle_scheduler_command(message)
-        except asyncio.CancelledError:
-            self.logger.info("Scheduler command listening task cancelled")
-        except Exception as e:
-            self.logger.error("Error in scheduler command listening task", error=str(e), exc_info=True)
-
-    async def _handle_scheduler_command(self, command_data: Dict[str, Any]) -> None:
-        """Handle an incoming command message for the scheduler."""
-        command_type = command_data.get("command")
-        self.logger.info("received_scheduler_command", command=command_type, data=command_data)
-
-        if command_type == "reload_elevator_states":
-            await self._load_elevator_states()
-            self.logger.info("Elevator states reloaded by command")
-        else:
-            self.logger.warning("unknown_scheduler_command", command=command_type, data=command_data)
 
     async def stop(self) -> None:
         """Stop the scheduler and clean up resources."""
