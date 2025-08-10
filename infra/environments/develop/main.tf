@@ -7,7 +7,11 @@ terraform {
     }
   }
 
-  backend "s3" {}
+  backend "s3" {
+    bucket = "redis-pubsub-101"
+    key    = "develop/redis-pubsub-101.tfstate"
+    region = var.region
+  }
 }
 
 provider "aws" {
