@@ -12,11 +12,8 @@ COPY uv.lock .
 # Install dependencies in a separate layer
 RUN uv pip install --system -e .
 
-# Auto-discover and install instrumentations
-RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
-
 # Copy the application source code
 COPY ./src /app/src
 
 # Production command
-CMD ["opentelemetry-instrument", "python", "-m", "src.controller.main"]
+CMD ["python", "-m", "src.controller.main"]
