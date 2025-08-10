@@ -58,3 +58,10 @@ resource "aws_ssm_parameter" "fluentbit_config_controller" {
   })
   tags = var.tags
 }
+
+resource "aws_ssm_parameter" "adot_config" {
+  name  = "/ecs/adot/config"
+  type  = "String"
+  value = templatefile("${path.module}/ecs-fargate-adot-config.yaml", {})
+  tags  = var.tags
+}

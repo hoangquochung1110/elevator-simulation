@@ -110,7 +110,6 @@ resource "aws_ecs_service" "controller" {
   }
 }
 
-
 resource "aws_ecs_task_definition" "webapp" {
   family                   = "${local.name}-webapp"
   network_mode             = "awsvpc"
@@ -121,6 +120,33 @@ resource "aws_ecs_task_definition" "webapp" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
     {
       name      = "webapp"
       image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
@@ -150,8 +176,7 @@ resource "aws_ecs_task_definition" "webapp" {
           awslogs-stream-prefix = "app"
         }
       }
-    },
-    local.fluentbit_webapp # FluentBit sidecar from fluentbit-sidecar.tf
+    }
   ])
 }
 
@@ -165,6 +190,33 @@ resource "aws_ecs_task_definition" "scheduler" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
     {
       name      = "scheduler"
       image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
@@ -190,7 +242,6 @@ resource "aws_ecs_task_definition" "scheduler" {
         }
       }
     },
-    local.fluentbit_scheduler # FluentBit sidecar from fluentbit-sidecar.tf
   ])
 }
 
@@ -204,6 +255,33 @@ resource "aws_ecs_task_definition" "controller" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
+
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
+
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
     {
       name      = "controller"
       image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
@@ -229,6 +307,5 @@ resource "aws_ecs_task_definition" "controller" {
         }
       }
     },
-    local.fluentbit_controller # FluentBit sidecar from fluentbit-sidecar.tf
   ])
 }
