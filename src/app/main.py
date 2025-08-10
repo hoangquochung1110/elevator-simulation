@@ -196,6 +196,14 @@ async def elevator_table(request: Request):
         {"request": request, "elevators": elevators, "num_floors": NUM_FLOORS},
     )
 
+@app.get("/request-table")
+async def request_table(request: Request):
+    """Render the request table view."""
+    response = await get_stream_requests()
+    return templates.TemplateResponse(
+        "request_table.html",
+        {"request": request, "requests": response["requests"]},
+    )
 
 @app.get("/")
 async def index(request: Request):

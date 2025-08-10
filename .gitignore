@@ -81,3 +81,6 @@ bruno.json
 
 # Grafana
 loki/
+
+# IDE
+.windsurf/

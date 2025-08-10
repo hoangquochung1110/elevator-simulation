@@ -31,8 +31,30 @@
         </tbody>
     </table>
 </div>
-<h2>External Requests</h2>
-<ul id="requests-ul">
-    <li>Loading...</li>
-</ul>
+<h2>Requests</h2>
+<div id="request-table"
+     hx-get="/request-table"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Floor</th>
+                <th>Direction</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for request in requests %}
+            <tr>
+                <td>{{ request.id }}</td>
+                <td>{{ request.floor }}</td>
+                <td>{{ request.direction }}</td>
+                <td>{{ request.timestamp }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}
