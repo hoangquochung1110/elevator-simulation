@@ -48,8 +48,8 @@ class EventStreamService:
     async def read_group(self, **kwargs):
         return await self._backend.read_group(**kwargs)
 
-    async def acknowledge(self, **kwargs):
-        return await self._backend.acknowledge(**kwargs)
+    async def acknowledge(self, stream: str, group: str, *message_ids: str):
+        return await self._backend.acknowledge(stream, group, *message_ids)
 
     async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
         return await self._backend.range(stream, start, end)
