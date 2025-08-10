@@ -252,9 +252,7 @@ class ElevatorController:
     async def _load_elevator_state(self) -> None:
         key = self.status_channel
         state = await cache.get(key)
-        # import ipdb; ipdb.set_trace()
         if state:
-            # self.elevator = Elevator.from_dict(json.loads(state))
             self.elevator = Elevator.from_dict(state)
         else:
             self.logger.warning(

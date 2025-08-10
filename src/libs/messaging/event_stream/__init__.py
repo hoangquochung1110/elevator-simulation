@@ -11,14 +11,12 @@ Basic usage:
     >>> await event_stream.publish('my_stream', {'key': 'value'})
 """
 
-from .service import EventStreamService, get_event_stream, init_event_stream, close
-from .exceptions import (
-    EventStreamError,
-    EventStreamConnectionError,
-)
+from .exceptions import EventStreamConnectionError, EventStreamError
+from .service import (EventStreamService, close, get_event_stream,
+                      init_event_stream)
 
 # The global event_stream instance
-event_stream = get_event_stream()
+event_stream: EventStreamService = get_event_stream()
 
 __all__ = [
     # Main instance
