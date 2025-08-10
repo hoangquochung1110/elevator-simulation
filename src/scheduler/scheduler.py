@@ -57,7 +57,7 @@ class Scheduler:
         # Main loop to process messages from event stream
         while self._running:
             try:
-                messages = await event_stream._backend.read_group(
+                messages = await event_stream.read_group(
                     stream=ELEVATOR_REQUESTS_STREAM,
                     group=SCHEDULER_GROUP,
                     consumer=self.consumer_id,
@@ -71,7 +71,7 @@ class Scheduler:
                 for stream_name, entries in messages:
                     for message_id, data in entries:
                         await self._handle_message(message_id, data)
-                        await event_stream._backend.acknowledge(
+                        await event_stream.acknowledge(
                             stream_name, SCHEDULER_GROUP, message_id
                         )
 
