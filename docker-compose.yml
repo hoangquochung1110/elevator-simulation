@@ -22,7 +22,12 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - redis
-    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    command: >
+      uvicorn src.app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/src
 
   scheduler:
     build:
@@ -36,7 +41,12 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - redis
-    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.scheduler.main
+    command: >
+      watchmedo auto-restart
+      --directory=/app/src
+      --pattern=*.py
+      --recursive
+      -- python -m src.scheduler.main
 
   controller:
     build:
@@ -50,7 +60,12 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - redis
-    command: watchmedo auto-restart --directory=/app/src --pattern=*.py --recursive -- python -m src.controller.main
+    command: >
+      watchmedo auto-restart
+      --directory=/app/src
+      --pattern=*.py
+      --recursive
+      -- python -m src.controller.main
 
 volumes:
   redis-data:
