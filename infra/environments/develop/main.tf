@@ -130,23 +130,6 @@ resource "aws_security_group" "ecs_service_private" {
 }
 
 ################################################################################
-# CloudWatch Log Groups
-################################################################################
-
-resource "aws_cloudwatch_log_group" "restapi" {
-  name = "/ecs/webapp"
-}
-
-resource "aws_cloudwatch_log_group" "controller" {
-  name = "/ecs/controller"
-}
-
-resource "aws_cloudwatch_log_group" "scheduler" {
-  name = "/ecs/scheduler"
-}
-
-
-################################################################################
 # VPC Module
 ################################################################################
 
