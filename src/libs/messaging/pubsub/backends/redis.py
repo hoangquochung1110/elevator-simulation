@@ -1,8 +1,8 @@
 """Redis Pub/Sub client implementation."""
 
-import os
 import json
 import logging
+import os
 from typing import Any, Dict, Optional, Union
 
 from redis.asyncio import Redis
@@ -99,6 +99,28 @@ class RedisPubSubBackend(PubSubClient):
             await self._pubsub.unsubscribe(channel)
             self._subscriptions.discard(channel)
             logger.debug("Unsubscribed from channel", channel=channel)
+
+    async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
+        """Get the next message from subscribed channels.
+
+        Args:
+            timeout: Maximum time in seconds to wait for a message.
+
+        Returns:
+            The message dictionary if available, None if no message was received
+            within the timeout.
+        """
+        if not self._subscriptions or self._pubsub is None:
+            return None
+
+        try:
+            message = await self._pubsub.get_message(timeout=timeout)
+            if message and message['type'] == 'message':
+                return self._decode_message(message['data'])
+            return None
+        except Exception as e:
+            logger.error("Error getting message", error=str(e))
+            return None
 
     async def close(self) -> None:
         """Close the client and release any resources."""

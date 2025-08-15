@@ -1,6 +1,6 @@
 """Abstract base class for pub/sub clients."""
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, Union
+from typing import Any, AsyncIterator, Dict, Optional, Union
 
 
 class PubSubClient(ABC):
@@ -43,4 +43,16 @@ class PubSubClient(ABC):
     @abstractmethod
     async def close(self) -> None:
         """Close the connection to the pub/sub backend."""
+        pass
+
+    @abstractmethod
+    async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
+        """Get the next message from the subscribed channels.
+
+        Args:
+            timeout: Maximum time in seconds to wait for a message
+
+        Returns:
+            The message if available, None if no message was received within the timeout
+        """
         pass

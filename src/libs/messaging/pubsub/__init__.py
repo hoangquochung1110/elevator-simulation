@@ -20,7 +20,7 @@ from .exceptions import (
     PubSubTimeoutError,
     PubSubUnsubscribeError,
 )
-from .service import PubSubService, close, get_local_pubsub, get_pubsub, init_pubsub
+from .service import PubSubService, close, create_pubsub_service, get_pubsub
 
 # The global pubsub instance
 pubsub = get_pubsub()
@@ -31,8 +31,7 @@ __all__ = [
     # Service and initialization
     "PubSubService",
     "get_pubsub",
-    "get_local_pubsub",
-    "init_pubsub",
+    "create_pubsub_service",
     "close",
     # Exceptions
     "PubSubError",

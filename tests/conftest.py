@@ -1,21 +1,13 @@
 import asyncio
 import json
-from typing import AsyncGenerator, Callable, Dict
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from fakeredis.aioredis import FakeRedis
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from src.app.main import app
-from src.config import (
-    ELEVATOR_REQUESTS_STREAM,
-    ELEVATOR_STATUS,
-    NUM_ELEVATORS,
-    get_redis_client,
-)
+from src.config import ELEVATOR_STATUS, NUM_ELEVATORS
 
 # Configure pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
@@ -161,6 +153,6 @@ def mock_controller_pubsub(mocker):
     mock_pubsub_instance._backend._ensure_connected = AsyncMock()
 
     mocker.patch(
-        "src.controller.controller.get_local_pubsub", return_value=mock_pubsub_instance
+        "src.controller.controller.create_pubsub_service", return_value=mock_pubsub_instance
     )
     return mock_pubsub_instance

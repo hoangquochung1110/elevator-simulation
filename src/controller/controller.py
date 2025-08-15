@@ -13,7 +13,7 @@ import structlog
 
 from ..config import ELEVATOR_COMMANDS, ELEVATOR_STATUS, NUM_FLOORS
 from ..libs.cache import cache
-from ..libs.messaging.pubsub import get_local_pubsub
+from ..libs.messaging.pubsub import create_pubsub_service
 from ..models.elevator import DoorStatus, Elevator, ElevatorStatus
 
 
@@ -44,7 +44,7 @@ class ElevatorController:
         self._movement_task = None
         self.elevator_state = None
         self.logger = structlog.get_logger(__name__)
-        self.pubsub = get_local_pubsub()
+        self.pubsub = create_pubsub_service()
 
     async def start(self) -> None:
         """
@@ -61,7 +61,7 @@ class ElevatorController:
 
         try:
             while self._running:
-                msg = await self.pubsub._backend._pubsub.get_message(timeout=1.0)
+                msg = await self.pubsub.get_message(timeout=1.0)
                 if msg is not None:
                     await self._handle_command(msg)
         finally:
@@ -72,7 +72,6 @@ class ElevatorController:
         self._running = False
         # unsubscribe from all channels and patterns, then close pubsub
         await self.pubsub.unsubscribe(self.command_channel)
-        # await pubsub.punsubscribe()
         await self.pubsub.close()
 
         if self._movement_task:
@@ -92,11 +91,10 @@ class ElevatorController:
             message: The Redis pub/sub message
         """
         # Skip subscribe/unsubscribe messages
-        if message["type"] != "message":
-            return
+        print(message)
 
         try:
-            data = json.loads(message["data"])
+            data = message
             command = data.get("command")
             self.logger.info(
                 "received_command",
@@ -112,7 +110,7 @@ class ElevatorController:
             self.logger.error(
                 "invalid_json",
                 elevator_id=self.elevator.id,
-                raw_message=message["data"],
+                raw_message=message,
                 exc_info=True,
             )
         except Exception as e:
@@ -120,7 +118,7 @@ class ElevatorController:
                 "error_handling_command",
                 error_message=str(e),
                 elevator_id=self.elevator.id,
-                raw_message=message["data"],
+                raw_message=message,
                 exc_info=True,
             )
 
