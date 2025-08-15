@@ -115,120 +115,111 @@ resource "aws_ecs_task_definition" "webapp" {
   family                   = "${local.name}-webapp"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 512  # Increased for FluentBit sidecar
-  memory                   = 1024 # Increased for FluentBit sidecar
+  cpu                      = 256 # 0.25 vCPU
+  memory                   = 512 # 512MB
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([
-    {
-      name      = "webapp"
-      image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
-      essential = true
-      portMappings = [{
-        containerPort = 8000
-        hostPort      = 8000
-        protocol      = "tcp"
-      }]
+  container_definitions = jsonencode([{
+    name      = "webapp"
+    image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
+    essential = true
+    portMappings = [{
+      containerPort = 8000
+      hostPort      = 8000
+      protocol      = "tcp"
+    }]
 
-      environment = [
-        {
-          name  = "REDIS_HOST"
-          value = aws_elasticache_cluster.main.cache_nodes[0].address
-        },
-        {
-          name  = "REDIS_PORT"
-          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.webapp_logs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "app"
-        }
+    environment = [
+      {
+        name  = "REDIS_HOST"
+        value = aws_elasticache_cluster.main.cache_nodes[0].address
+      },
+      {
+        name  = "REDIS_PORT"
+        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
       }
-    },
-    local.fluentbit_webapp # FluentBit sidecar from fluentbit-sidecar.tf
-  ])
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.restapi.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+  }])
 }
 
 resource "aws_ecs_task_definition" "scheduler" {
   family                   = "${local.name}-scheduler"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 512  # Increased for FluentBit sidecar
-  memory                   = 1024 # Increased for FluentBit sidecar
+  cpu                      = 256 # 0.25 vCPU
+  memory                   = 512 # 512MB
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([
-    {
-      name      = "scheduler"
-      image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
-      essential = true
+  container_definitions = jsonencode([{
+    name      = "scheduler"
+    image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
+    essential = true
 
-      environment = [
-        {
-          name  = "REDIS_HOST"
-          value = aws_elasticache_cluster.main.cache_nodes[0].address
-        },
-        {
-          name  = "REDIS_PORT"
-          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.scheduler_logs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "app"
-        }
+    environment = [
+      {
+        name  = "REDIS_HOST"
+        value = aws_elasticache_cluster.main.cache_nodes[0].address
+      },
+      {
+        name  = "REDIS_PORT"
+        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
       }
-    },
-    local.fluentbit_scheduler # FluentBit sidecar from fluentbit-sidecar.tf
-  ])
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.scheduler.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+  }])
 }
 
 resource "aws_ecs_task_definition" "controller" {
   family                   = "${local.name}-controller"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 512  # Increased for FluentBit sidecar
-  memory                   = 1024 # Increased for FluentBit sidecar
+  cpu                      = 256 # 0.25 vCPU
+  memory                   = 512 # 512MB
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([
-    {
-      name      = "controller"
-      image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
-      essential = true
+  container_definitions = jsonencode([{
+    name      = "controller"
+    image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
+    essential = true
 
-      environment = [
-        {
-          name  = "REDIS_HOST"
-          value = aws_elasticache_cluster.main.cache_nodes[0].address
-        },
-        {
-          name  = "REDIS_PORT"
-          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.controller_logs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "app"
-        }
+    environment = [
+      {
+        name  = "REDIS_HOST"
+        value = aws_elasticache_cluster.main.cache_nodes[0].address
+      },
+      {
+        name  = "REDIS_PORT"
+        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
       }
-    },
-    local.fluentbit_controller # FluentBit sidecar from fluentbit-sidecar.tf
-  ])
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.controller.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+  }])
 }
