@@ -187,7 +187,9 @@ class RedisBackend(BaseCacheBackend):
         """
         try:
             await self._ensure_connected()
-            return [key.decode() for key in await self.client.keys(pattern)]
+            keys = await self.client.keys(pattern)
+            # Redis returns strings when decode_responses=True; handle both
+            return [key.decode() if isinstance(key, bytes) else key for key in keys]
         except RedisConnectionError as e:
             logger.error("Redis keys error: %s", e)
             return []
