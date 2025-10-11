@@ -3,14 +3,19 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Union
-
-from redis.asyncio import Redis
-from redis.asyncio.client import PubSub as RedisPubSub
-from redis.exceptions import ConnectionError as RedisConnectionError
-
+import asyncio
+import importlib
+from typing import Any, Dict, Optional, Union, AsyncIterator
+# Use relative imports within the package to satisfy type checker/package resolution
 from ..base import PubSubClient
 from ..exceptions import PubSubConnectionError, PubSubPublishError
+
+# Dynamically import redis asyncio modules to avoid hard dependency during type checking
+try:
+    _redis_asyncio = importlib.import_module("redis.asyncio")
+except Exception:
+    _redis_asyncio = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +32,8 @@ class RedisPubSubBackend(PubSubClient):
         **kwargs: Any,
     ):
         """Initialize with Redis connection parameters."""
-        self._client: Optional[Redis] = None
-        self._pubsub: Optional[RedisPubSub] = None
+        self._client: Optional[Any] = None
+        self._pubsub: Optional[Any] = None
         self._subscriptions = set()
         self._client_params = {
             "host": host or os.environ.get("REDIS_HOST", "localhost"),
@@ -40,21 +45,26 @@ class RedisPubSubBackend(PubSubClient):
         }
 
     @property
-    def client(self) -> Redis:
+    def client(self) -> Any:
         """Get the Redis client, initializing it if necessary."""
         if self._client is None:
-            self._client = Redis(**self._client_params)
+            if _redis_asyncio is None:
+                raise PubSubConnectionError("redis.asyncio module is not available")
+            self._client = _redis_asyncio.Redis(**self._client_params)
         return self._client
 
     async def _ensure_connected(self) -> None:
         """Ensure the Redis client is connected."""
         if self._client is None:
-            self._client = Redis(**self._client_params)
+            if _redis_asyncio is None:
+                raise PubSubConnectionError("redis.asyncio module is not available")
+            self._client = _redis_asyncio.Redis(**self._client_params)
+        assert self._client is not None
         if self._pubsub is None:
             self._pubsub = self._client.pubsub()
         try:
             await self._client.ping()
-        except RedisConnectionError as e:
+        except Exception as e:
             logger.error("Redis connection error: %s", e)
             raise PubSubConnectionError(f"Redis connection error: {e}") from e
 
@@ -64,19 +74,33 @@ class RedisPubSubBackend(PubSubClient):
             await self._ensure_connected()
             msg = json.dumps(message) if isinstance(message, dict) else str(message)
             await self.client.publish(channel, msg)
-            logger.debug("Published message to channel", channel=channel, message=msg)
-        except RedisConnectionError as e:
-            logger.error("Failed to publish message", channel=channel, error=str(e))
+            logger.debug("Published message to channel %s: %s", channel, msg)
+        except Exception as e:
+            logger.error("Failed to publish message to channel %s: %s", channel, str(e))
             raise PubSubPublishError(f"Failed to publish message: {e}") from e
 
-    async def subscribe(self, channel: str) -> None:
-        """Subscribe to a channel."""
+    async def subscribe(self, channel: str) -> AsyncIterator[Dict[str, Any]]:
+        """Subscribe to a channel and return an async iterator of messages."""
         await self._ensure_connected()
 
+        pubsub = self._pubsub
+        assert pubsub is not None
+
         if channel not in self._subscriptions:
-            await self._pubsub.subscribe(channel)
+            await pubsub.subscribe(channel)
             self._subscriptions.add(channel)
-            logger.debug("Subscribed to channel", channel=channel)
+            logger.debug("Subscribed to channel %s", channel)
+
+        async def _message_iterator() -> AsyncIterator[Dict[str, Any]]:
+            while True:
+                msg = await self.get_message(timeout=1.0)
+                if msg is not None:
+                    yield msg
+                else:
+                    # Avoid tight loop when no messages
+                    await asyncio.sleep(0.05)
+
+        return _message_iterator()
 
     def _decode_message(self, message_data: Union[str, bytes]) -> Dict[str, Any]:
         """Decode message data, attempting JSON deserialization."""
@@ -98,7 +122,7 @@ class RedisPubSubBackend(PubSubClient):
         if self._pubsub is not None and channel in self._subscriptions:
             await self._pubsub.unsubscribe(channel)
             self._subscriptions.discard(channel)
-            logger.debug("Unsubscribed from channel", channel=channel)
+            logger.debug("Unsubscribed from channel %s", channel)
 
     async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
         """Get the next message from subscribed channels.
@@ -113,14 +137,10 @@ class RedisPubSubBackend(PubSubClient):
         if not self._subscriptions or self._pubsub is None:
             return None
 
-        try:
-            message = await self._pubsub.get_message(timeout=timeout)
-            if message and message['type'] == 'message':
-                return self._decode_message(message['data'])
-            return None
-        except Exception as e:
-            logger.error("Error getting message", error=str(e))
-            return None
+        message = await self._pubsub.get_message(timeout=timeout)
+        if message and message['type'] == 'message':
+            return self._decode_message(message['data'])
+        return None
 
     async def close(self) -> None:
         """Close the client and release any resources."""

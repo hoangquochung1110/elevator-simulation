@@ -11,8 +11,6 @@ import time
 import json
 import uuid
 
-from pydantic import BaseModel, Field, ConfigDict
-
 
 class RequestStatus(str, enum.Enum):
     """Possible states of an elevator request."""

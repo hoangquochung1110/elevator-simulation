@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 class EventStreamService:
     """High-level event stream service with a simple interface."""
 
-    _instance = None
-    _backend: EventStreamClient = None
-    _initialized = False
+    _instance: Optional["EventStreamService"] = None
+    _backend: Optional[EventStreamClient] = None
+    _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
         """Implement singleton pattern."""
@@ -43,16 +43,30 @@ class EventStreamService:
         self._initialized = True
 
     async def publish(self, stream: str, data: Any) -> str:
-        return await self._backend.publish(stream, data)
+        backend = self._backend
+        assert backend is not None
+        return await backend.publish(stream, data)
+
+    async def create_consumer_group(self, stream: str, group: str) -> bool:
+        """Create a consumer group on the event stream backend."""
+        backend = self._backend
+        assert backend is not None
+        return await backend.create_consumer_group(stream, group)
 
     async def read_group(self, **kwargs):
-        return await self._backend.read_group(**kwargs)
+        backend = self._backend
+        assert backend is not None
+        return await backend.read_group(**kwargs)
 
     async def acknowledge(self, stream: str, group: str, *message_ids: str):
-        return await self._backend.acknowledge(stream, group, *message_ids)
+        backend = self._backend
+        assert backend is not None
+        return await backend.acknowledge(stream, group, *message_ids)
 
     async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
-        return await self._backend.range(stream, start, end)
+        backend = self._backend
+        assert backend is not None
+        return await backend.range(stream, start, end)
 
     async def trim(
         self,
@@ -61,11 +75,14 @@ class EventStreamService:
         maxlen: Optional[int] = None,
         approximate: bool = True,
     ) -> int:
-        return await self._backend.trim(stream, min_id, maxlen, approximate)
+        backend = self._backend
+        assert backend is not None
+        return await backend.trim(stream, min_id, maxlen, approximate)
 
     async def close(self) -> None:
-        if self._backend:
-            await self._backend.close()
+        backend = self._backend
+        if backend is not None:
+            await backend.close()
 
 
 # Global event stream instance

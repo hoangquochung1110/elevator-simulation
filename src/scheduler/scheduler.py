@@ -35,8 +35,8 @@ class Scheduler:
         """Start the scheduler service."""
         self._running = True
 
-        # Create consumer group
-        await event_stream._backend.create_consumer_group(
+        # Create consumer group via service API (avoid accessing private backend)
+        await event_stream.create_consumer_group(
             ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP
         )
 

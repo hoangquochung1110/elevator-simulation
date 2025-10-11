@@ -22,9 +22,9 @@ class CacheService:
     It handles serialization, error handling, and provides utility methods.
     """
 
-    _instance = None
-    _backend: BaseCacheBackend = None
-    _initialized = False
+    _instance: Optional["CacheService"] = None
+    _backend: Optional[BaseCacheBackend] = None
+    _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
         """Implement singleton pattern."""
@@ -53,14 +53,14 @@ class CacheService:
             raise ValueError(f"Unsupported cache backend: {backend}")
         elif isinstance(backend, BaseCacheBackend):
             self._backend = backend
-        else:
-            raise ValueError("Invalid backend type")
 
         self._initialized = True
 
     async def get(self, key: str, default: Any = None) -> Any:
         """Retrieve a value from the cache by key."""
-        return await self._backend.get(key, default)
+        backend = self._backend
+        assert backend is not None
+        return await backend.get(key, default)
 
     async def set(
         self,
@@ -71,32 +71,45 @@ class CacheService:
         xx: bool = False,
     ) -> bool:
         """Set a value in the cache."""
-        return await self._backend.set(key, value, timeout=timeout, nx=nx, xx=xx)
+        backend = self._backend
+        assert backend is not None
+        return await backend.set(key, value, timeout=timeout, nx=nx, xx=xx)
 
     async def delete(self, key: str) -> bool:
         """Delete a key from the cache."""
-        return await self._backend.delete(key)
+        backend = self._backend
+        assert backend is not None
+        return await backend.delete(key)
 
     async def exists(self, key: str) -> bool:
         """Check if a key exists in the cache."""
-        return await self._backend.exists(key)
+        backend = self._backend
+        assert backend is not None
+        return await backend.exists(key)
 
     async def close(self) -> None:
         """Close the connection to the cache backend."""
-        if self._backend:
-            await self._backend.close()
+        backend = self._backend
+        if backend is not None:
+            await backend.close()
 
     async def get_many(self, keys: List[str]) -> Dict[str, Any]:
         """Fetch multiple keys from the cache."""
-        return await self._backend.get_many(keys)
+        backend = self._backend
+        assert backend is not None
+        return await backend.get_many(keys)
 
     async def set_many(self, data: Dict[str, Any], timeout: Optional[int] = None) -> None:
         """Set multiple keys in the cache."""
-        await self._backend.set_many(data, timeout=timeout)
+        backend = self._backend
+        assert backend is not None
+        await backend.set_many(data, timeout=timeout)
 
     async def delete_many(self, keys: List[str]) -> None:
         """Delete multiple keys from the cache."""
-        await self._backend.delete_many(keys)
+        backend = self._backend
+        assert backend is not None
+        await backend.delete_many(keys)
 
     async def get_or_set(
         self,
@@ -105,39 +118,51 @@ class CacheService:
         timeout: Optional[int] = None,
     ) -> Any:
         """Get a key's value or set it with a default if it doesn't exist."""
-        return await self._backend.get_or_set(key, default, timeout=timeout)
+        backend = self._backend
+        assert backend is not None
+        return await backend.get_or_set(key, default, timeout=timeout)
 
-    async def incr(self, key: str, delta: int = 1) -> int:
-        """Increment a key's value by delta."""
-        return await self._backend.incr(key, delta=delta)
+    async def incr(self, key: str, delta: int = 1) -> int | float:
+        """Increment a key's value by delta. Returns int or float."""
+        backend = self._backend
+        assert backend is not None
+        return await backend.incr(key, delta=delta)
 
-    async def decr(self, key: str, delta: int = 1) -> int:
-        """Decrement a key's value by delta."""
-        return await self._backend.decr(key, delta=delta)
+    async def decr(self, key: str, delta: int = 1) -> int | float:
+        """Decrement a key's value by delta. Returns int or float."""
+        backend = self._backend
+        assert backend is not None
+        return await backend.decr(key, delta=delta)
 
     async def get_ttl(self, key: str) -> Optional[int]:
         """Get the time-to-live for a key in seconds."""
-        return await self._backend.get_ttl(key)
+        backend = self._backend
+        assert backend is not None
+        return await backend.get_ttl(key)
 
     async def set_ttl(self, key: str, timeout: int) -> bool:
         """Set the time-to-live for a key in seconds."""
-        return await self._backend.set_ttl(key, timeout)
+        backend = self._backend
+        assert backend is not None
+        return await backend.set_ttl(key, timeout)
 
     async def clear(self) -> None:
         """Clear the entire cache."""
-        await self._backend.clear()
+        backend = self._backend
+        assert backend is not None
+        await backend.clear()
 
     async def keys(self, pattern: str = "*") -> List[str]:
         """Get all keys matching a pattern."""
-        if hasattr(self._backend, 'keys'):
-            return await self._backend.keys(pattern)
-        raise NotImplementedError("The current backend does not support keys()")
+        backend = self._backend
+        assert backend is not None
+        return await backend.keys(pattern)
 
     async def ping(self) -> bool:
         """Ping the cache server."""
-        if hasattr(self._backend, 'ping'):
-            return await self._backend.ping()
-        return True
+        backend = self._backend
+        assert backend is not None
+        return await backend.ping()
 
     def cached(
         self,

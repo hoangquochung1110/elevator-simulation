@@ -4,7 +4,7 @@ Redis Streams implementation of the Event Stream client interface.
 import os
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from redis.asyncio import Redis
 
@@ -39,9 +39,21 @@ class RedisStreamClient(EventStreamClient):
     async def publish(self, stream: str, data: Dict[str, Any]) -> str:
         """Publish an event to a Redis Stream."""
         try:
-            # Convert dict values to strings, bytes, or numbers
-            payload = {k: json.dumps(v) if isinstance(v, (dict, list)) else v for k, v in data.items()}
-            message_id = await self.redis.xadd(stream, payload)
+            # Normalize values to encodable types accepted by redis: str, bytes, int, float
+            payload: Dict[str, Any] = {}
+            for k, v in data.items():
+                if isinstance(v, (dict, list)):
+                    payload[k] = json.dumps(v)
+                elif isinstance(v, (str, bytes, int, float)):
+                    payload[k] = v
+                elif v is None:
+                    payload[k] = ""
+                else:
+                    try:
+                        payload[k] = json.dumps(v)
+                    except TypeError:
+                        payload[k] = str(v)
+            message_id = await self.redis.xadd(stream, cast(Dict[Any, Any], payload))
             logger.debug("Event published to stream '%s' with message ID: %s", stream, message_id)
             return message_id
         except Exception as e:

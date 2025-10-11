@@ -32,7 +32,6 @@ from .exceptions import (
     CacheTimeoutError,
     CacheLockError,
 )
-from .config import get_cache_config, get_redis_params
 
 # The global cache instance
 cache = get_cache()
@@ -46,10 +45,6 @@ __all__ = [
     'get_cache',
     'init_cache',
     'close',
-    
-    # Configuration
-    'get_cache_config',
-    'get_redis_params',
     
     # Exceptions
     'CacheError',

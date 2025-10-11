@@ -122,7 +122,7 @@ class BaseCacheBackend(ABC):
             return default
         return val
 
-    async def incr(self, key: str, delta: int = 1) -> int:
+    async def incr(self, key: str, delta: int = 1) -> int | float:
         """Increment a key's value by delta.
 
         Args:
@@ -130,7 +130,7 @@ class BaseCacheBackend(ABC):
             delta: The amount to increment by (default: 1).
 
         Returns:
-            The new value after incrementing.
+            The new value after incrementing (int or float).
         """
         value = await self.get(key, 0)
         if not isinstance(value, (int, float)):
@@ -139,7 +139,7 @@ class BaseCacheBackend(ABC):
         await self.set(key, new_value)
         return new_value
 
-    async def decr(self, key: str, delta: int = 1) -> int:
+    async def decr(self, key: str, delta: int = 1) -> int | float:
         """Decrement a key's value by delta.
 
         Args:
@@ -147,7 +147,7 @@ class BaseCacheBackend(ABC):
             delta: The amount to decrement by (default: 1).
 
         Returns:
-            The new value after decrementing.
+            The new value after decrementing (int or float).
         """
         return await self.incr(key, -delta)
 
@@ -177,3 +177,21 @@ class BaseCacheBackend(ABC):
     async def clear(self) -> None:
         """Clear the entire cache."""
         raise NotImplementedError("Subclasses must implement clear()")
+
+    async def keys(self, pattern: str = "*") -> List[str]:
+        """Get all keys matching a pattern.
+
+        Args:
+            pattern: Glob-style pattern to match keys (default: "*").
+
+        Returns:
+            List of matching keys.
+        """
+        raise NotImplementedError("Subclasses must implement keys()")
+
+    async def ping(self) -> bool:
+        """Ping the cache server to verify availability.
+
+        Returns True by default for backends without explicit ping support.
+        """
+        return True
