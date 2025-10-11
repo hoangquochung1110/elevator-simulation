@@ -1,9 +1,9 @@
 """Factory for creating and configuring Scheduler instances."""
-import structlog
+import logging
 
 from .scheduler import Scheduler
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 async def create_scheduler(id) -> Scheduler:

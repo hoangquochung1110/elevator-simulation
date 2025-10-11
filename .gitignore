@@ -79,8 +79,5 @@ bruno.json
 *.tfvars
 !*.tfvars.example
 
-# Grafana
-loki/
-
 # IDE
 .windsurf/

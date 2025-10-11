@@ -7,20 +7,16 @@ It listens to elevator requests and assigns them to the most appropriate elevato
 """
 
 import asyncio
-import os
 import signal
-import sys
+import logging
 from contextlib import asynccontextmanager
 
-import structlog
-
-from src.config import configure_logging
 from src.scheduler.factory import create_scheduler
 
 # Set up graceful shutdown
 shutdown_event = asyncio.Event()
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def handle_signals():
@@ -54,7 +50,7 @@ async def scheduler_lifecycle():
         yield scheduler
 
     except Exception as e:
-        logger.error("scheduler_error", error=str(e))
+        logger.error("scheduler_error %s", str(e))
         raise
     finally:
         if scheduler:
@@ -65,18 +61,17 @@ async def scheduler_lifecycle():
 async def main():
     """Main entry point for the Scheduler service."""
     try:
-        async with scheduler_lifecycle() as scheduler:
+        async with scheduler_lifecycle():
             # Keep the service running until shutdown signal
             await shutdown_event.wait()
             logger.info("shutdown_signal_received")
     except asyncio.CancelledError:
         logger.info("scheduler_shutdown_requested")
     except Exception as e:
-        logger.error("unexpected_error", error=str(e))
+        logger.error("unexpected_error %s", str(e))
         raise
 
 
 if __name__ == "__main__":
-    configure_logging()
     handle_signals()
     asyncio.run(main())

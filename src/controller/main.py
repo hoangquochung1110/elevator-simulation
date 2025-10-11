@@ -9,24 +9,26 @@ It listens to elevator requests and assigns them to the most appropriate elevato
 import asyncio
 import signal
 
-import structlog
+import logging
 
-from src.config import NUM_ELEVATORS, configure_logging
+from src.config import NUM_ELEVATORS
 from src.controller.controller import ElevatorController
 
-logger = structlog.get_logger(__name__)
+# Configure logging to work with OpenTelemetry auto-instrumentation
+logging.basicConfig(level=logging.INFO)
 
+logger = logging.getLogger(__name__)
 
-async def shutdown(signal, loop):
+async def shutdown(sig, loop):
     """Cleanup tasks tied to the service's shutdown."""
-    logger.info(f"Received exit signal {signal.name}...")
+    logger.info("Received exit signal %s...", sig.name)
 
     tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 
     for task in tasks:
         task.cancel()
 
-    logger.info(f"Cancelling {len(tasks)} outstanding tasks")
+    logger.info("Cancelling %d outstanding tasks", len(tasks))
     await asyncio.gather(*tasks, return_exceptions=True)
     loop.stop()
 
@@ -59,7 +61,7 @@ async def main():
     except asyncio.CancelledError:
         logger.info("Shutdown sequence initiated")
     except Exception as e:
-        logger.error(f"Error in controller service: {e}")
+        logger.error("Error in controller service: %s", e)
         raise
     finally:
         logger.info("Shutting down controllers...")
@@ -70,14 +72,13 @@ async def main():
 
 
 if __name__ == "__main__":
-    configure_logging()
 
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Service stopped by keyboard interrupt")
     except Exception as e:
-        logger.error(f"Service failed: {e}")
+        logger.error("Service failed: %s", e)
         raise
     finally:
         logger.info("Service shutdown complete")

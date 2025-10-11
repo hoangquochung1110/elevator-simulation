@@ -8,7 +8,6 @@ from .channels import (
     ELEVATOR_REQUESTS_STREAM,
     ELEVATOR_STATUS,
 )
-from .logging import configure_logging
 from .redis import close_redis_client, get_redis_client
 
 # Initialize logger at module level
@@ -30,7 +29,6 @@ __all__ = [
     "ELEVATOR_COMMANDS",
     "ELEVATOR_REQUESTS_STREAM",
     "ELEVATOR_STATUS",
-    "configure_logging",
     "close_redis_client",
     "get_redis_client",
     "NUM_FLOORS",

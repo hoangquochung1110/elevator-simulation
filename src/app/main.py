@@ -1,5 +1,6 @@
 # src/main.py
 import uuid
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
@@ -10,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..config import (
+from src.config import (
     ELEVATOR_REQUESTS_STREAM,
     ELEVATOR_STATUS,
     NUM_ELEVATORS,
@@ -19,13 +20,23 @@ from ..config import (
     REDIS_HOST,
     REDIS_PASSWORD,
     REDIS_PORT,
-    configure_logging,
 )
-from ..libs.cache import cache
-from ..libs.cache import close as close_cache
-from ..libs.cache import init_cache
-from ..libs.messaging.event_stream import close as close_event_stream
-from ..libs.messaging.event_stream import event_stream, init_event_stream
+from src.libs.cache import cache
+from src.libs.cache import close as close_cache
+from src.libs.cache import init_cache
+from src.libs.messaging.event_stream import close as close_event_stream
+from src.libs.messaging.event_stream import event_stream, init_event_stream
+
+# Initialize logger with formatter
+logger = logging.getLogger(__name__)
+
+# Set up basic logging configuration if not already configured
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 load_dotenv()  # take environment variables
 
@@ -34,9 +45,10 @@ load_dotenv()  # take environment variables
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Configure logging
-    configure_logging()
+    logger.info("Application starting up")
 
     # Initialize Cache Service
+    logger.info("Initializing cache service: host=%s, port=%s, db=%s", REDIS_HOST, REDIS_PORT, REDIS_DB)
     init_cache(
         host=REDIS_HOST,
         port=REDIS_PORT,
@@ -45,6 +57,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize Event Stream Service
+    logger.info("Initializing event stream service")
     init_event_stream(
         host=REDIS_HOST,
         port=REDIS_PORT,
@@ -69,8 +82,10 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # Cleanup
+        logger.info("Shutting down application, cleaning up resources")
         await close_cache()
         await close_event_stream()
+        logger.info("Application shutdown complete")
 
 
 app = FastAPI(title="Elevator Simulation", lifespan=lifespan)
@@ -122,16 +137,19 @@ async def fetch_elevator_statuses() -> list[dict]:
 
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
+    request_id = str(uuid.uuid4())
+    logger.info("Received internal request: elevator_id=%s, destination_floor=%s", req.elevator_id, req.destination_floor)
     request_data = req.model_dump()
     request_data.update(
         {
             "timestamp": datetime.now().isoformat(),
-            "id": str(uuid.uuid4()),
+            "id": request_id,
             "request_type": "internal",
             "status": "pending",
         }
     )
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
+    logger.info("Published internal request: id=%s", request_id)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 

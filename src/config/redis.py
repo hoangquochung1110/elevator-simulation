@@ -3,11 +3,11 @@ Simplified Redis client initialization.
 """
 
 from typing import Optional
-import structlog
+import logging
 from redis.asyncio import Redis
-from redis.exceptions import ConnectionError
+from redis.exceptions import ConnectionError as RedisConnectionError
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _redis_client = None
 
@@ -48,7 +48,7 @@ async def get_redis_client(
         raise ValueError("Redis database number must be a non-negative integer")
 
     try:
-        logger.info("Initializing Redis client", host=host, port=port, db=db)
+        logger.info("Initializing Redis client - host: %s, port: %s, db: %s", host, port, db)
         _redis_client = Redis(
             host=host,
             port=port,
@@ -61,19 +61,17 @@ async def get_redis_client(
         await _redis_client.ping()
         logger.info("Redis client initialized successfully")
         return _redis_client
-    except ConnectionError as e:
+    except RedisConnectionError as e:
         logger.error(
-            "Failed to connect to Redis",
-            error=str(e),
-            host=host,
-            port=port,
+            "Failed to connect to Redis: %s, host=%s, port=%s",
+            str(e), host, port,
             exc_info=True
         )
         raise
     except Exception as e:
         logger.error(
-            "An unexpected error occurred during Redis initialization",
-            error=str(e),
+            "An unexpected error occurred during Redis initialization: %s",
+            str(e),
             exc_info=True
         )
         raise
@@ -92,8 +90,8 @@ async def close_redis_client() -> None:
             logger.info("Redis client connection closed")
         except Exception as e:
             logger.error(
-                "Error while closing Redis connection",
-                error=str(e),
+                "Error while closing Redis connection: %s",
+                str(e),
                 exc_info=True
             )
         finally:
