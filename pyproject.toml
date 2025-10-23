@@ -6,14 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "asyncio>=3.4.3",
-    "fakeredis>=2.29.0",
     "fastapi>=0.115.12",
     "jinja2>=3.1.6",
     "python-dotenv>=1.1.0",
     "redis>=5.2.1",
-    "structlog>=25.2.0",
     "uvicorn>=0.34.1",
-    "watchdog>=2.3.1",
 ]
 
 [tool.ruff]
@@ -54,8 +51,8 @@ quote-style = "double"
 # automatically detect the appropriate line ending.
 line-ending = "auto"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "faker>=22.5.0",
     "fakeredis>=2.29.0",
     "httpx>=0.28.1",
@@ -65,5 +62,20 @@ dev-dependencies = [
     "pytest-env>=1.1.5",
     "pytest-mock>=3.12.0",
     "pytest>=8.0.0",
+    "watchdog>=6.0.0",
 ]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["."]
+exclude = ["**/__pycache__", ".venv", ".tox", "build", "dist"]
+
+# If you use "src/" layout or a monorepo, point extra paths at import roots:
+executionEnvironments = [
+  { root = ".", extraPaths = ["src", "packages/pkg_a/src", "services/api/src"] }
+]
+
+# Optional quality knobs
+reportMissingImports = true
+useLibraryCodeForTypes = true
