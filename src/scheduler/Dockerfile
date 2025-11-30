@@ -14,7 +14,6 @@ COPY uv.lock .
 
 # Install dependencies in a separate layer
 RUN uv pip install --system -e .
-RUN uv pip install opentelemetry-instrumentation-logging
 
 # Install OpenTelemetry core packages
 RUN uv pip install opentelemetry-distro opentelemetry-exporter-otlp
