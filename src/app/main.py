@@ -67,8 +67,6 @@ async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
             }
             await cache.set(key, initial_state)
     try:
-        logger.error("Service started")
-        logger.error("Hello world")
         yield
     finally:
         # Cleanup
@@ -121,7 +119,6 @@ async def fetch_elevator_statuses() -> list[dict]:
         key = ELEVATOR_STATUS.format(i)
         data = await cache.get(key)
         if data:
-            logger.info(msg=data)
             statuses.append((i, data))
     # Sort by elevator ID
     statuses.sort(key=lambda x: x[0])
