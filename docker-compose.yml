@@ -1,5 +1,17 @@
 version: "3.9"
 
+# Define anchors for reusable configuration
+x-otel-env: &otel-base
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_LOGS_EXPORTER: console,otlp
+  OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
+  OTEL_PYTHON_LOG_CORRELATION: "true"
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  # If you truly want logs only (keep these, optional):
+  OTEL_TRACES_EXPORTER: none
+  OTEL_METRICS_EXPORTER: none
+
 services:
   redis:
     image: redis:7.2-alpine
@@ -17,17 +29,16 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - PYTHONUNBUFFERED=1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONUNBUFFERED: 1
+      <<: *otel-base
+      OTEL_SERVICE_NAME: redis-pubsub-101-webapp
     depends_on:
       - redis
-    command: >
-      uvicorn src.app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --reload-dir /app/src
+      - otel-collector
+    networks:
+      - default
 
   scheduler:
     build:
@@ -36,17 +47,16 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - PYTHONUNBUFFERED=1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONUNBUFFERED: 1
+      <<: *otel-base
+      OTEL_SERVICE_NAME: redis-pubsub-101-scheduler
     depends_on:
       - redis
-    command: >
-      watchmedo auto-restart
-      --directory=/app/src
-      --pattern=*.py
-      --recursive
-      -- python -m src.scheduler.main
+      - otel-collector
+    networks:
+      - default
 
   controller:
     build:
@@ -55,17 +65,66 @@ services:
     volumes:
       - ./src:/app/src
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - PYTHONUNBUFFERED=1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONUNBUFFERED: 1
+      <<: *otel-base
+      OTEL_SERVICE_NAME: redis-pubsub-101-controller
     depends_on:
       - redis
-    command: >
-      watchmedo auto-restart
-      --directory=/app/src
-      --pattern=*.py
-      --recursive
-      -- python -m src.controller.main
+      - otel-collector
+    networks:
+      - default
+
+  # OpenTelemetry Collector (Data Pipeline)
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.106.1
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otel/config.yaml
+    command:
+      - "--config=/etc/otel/config.yaml"
+    ports:
+      - "4317:4317" #grpc
+      - "4318:4318" #http
+    depends_on:
+      - loki
+    networks:
+      - default
+      - monitoring
+
+  # log aggregation
+  loki:
+    image: grafana/loki:3.2.1
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitoring
+
+  # Dashboard
+  grafana:
+    image: grafana/grafana:11.6.0
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-simple-json-datasource
+    ports:
+      - 3000:3000/tcp
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - monitoring
 
 volumes:
   redis-data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  default:
+    driver: bridge
+  monitoring:

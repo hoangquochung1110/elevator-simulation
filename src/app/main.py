@@ -10,7 +10,6 @@ from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
-
 from src.libs.cache import cache
 from src.libs.messaging.event_stream import event_stream
 from src.config import (
@@ -34,6 +33,17 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 load_dotenv()  # take environment variables
+
+# Configure logging to work with OpenTelemetry auto-instrumentation
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+formatter = logging.Formatter(
+    '{"message": "%(message)s", "log_level": "%(levelname)s"}'
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 # --- Startup and shutdown events ---

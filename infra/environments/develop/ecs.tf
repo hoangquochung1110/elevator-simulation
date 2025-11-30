@@ -120,36 +120,57 @@ resource "aws_ecs_task_definition" "webapp" {
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([{
-    name      = "webapp"
-    image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
-    essential = true
-    portMappings = [{
-      containerPort = 8000
-      hostPort      = 8000
-      protocol      = "tcp"
-    }]
+  container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
 
-    environment = [
-      {
-        name  = "REDIS_HOST"
-        value = aws_elasticache_cluster.main.cache_nodes[0].address
-      },
-      {
-        name  = "REDIS_PORT"
-        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-      }
-    ]
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
 
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.restapi.name
-        awslogs-region        = var.region
-        awslogs-stream-prefix = "ecs"
-      }
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
+    {
+      name      = "webapp"
+      image     = "${data.aws_ecr_repository.webapp.repository_url}:${var.webapp_image_tag}"
+      essential = true
+      portMappings = [{
+        containerPort = 8000
+        hostPort      = 8000
+        protocol      = "tcp"
+      }]
+
+      environment = [
+        {
+          name  = "REDIS_HOST"
+          value = aws_elasticache_cluster.main.cache_nodes[0].address
+        },
+        {
+          name  = "REDIS_PORT"
+          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
+        }
+      ]
     }
-  }])
+
+  ])
 }
 
 resource "aws_ecs_task_definition" "scheduler" {
@@ -161,31 +182,51 @@ resource "aws_ecs_task_definition" "scheduler" {
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([{
-    name      = "scheduler"
-    image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
-    essential = true
+  container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
 
-    environment = [
-      {
-        name  = "REDIS_HOST"
-        value = aws_elasticache_cluster.main.cache_nodes[0].address
-      },
-      {
-        name  = "REDIS_PORT"
-        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-      }
-    ]
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
 
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.scheduler.name
-        awslogs-region        = var.region
-        awslogs-stream-prefix = "ecs"
-      }
-    }
-  }])
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
+    {
+      name      = "scheduler"
+      image     = "${data.aws_ecr_repository.scheduler.repository_url}:${var.scheduler_image_tag}"
+      essential = true
+
+      environment = [
+        {
+          name  = "REDIS_HOST"
+          value = aws_elasticache_cluster.main.cache_nodes[0].address
+        },
+        {
+          name  = "REDIS_PORT"
+          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
+        }
+      ]
+    },
+  ])
 }
 
 resource "aws_ecs_task_definition" "controller" {
@@ -197,29 +238,49 @@ resource "aws_ecs_task_definition" "controller" {
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([{
-    name      = "controller"
-    image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
-    essential = true
+  container_definitions = jsonencode([
+    # OTEL Collector Sidecar (always first, so other containers can depend on it)
+    {
+      name      = local.otel_collector.name
+      image     = local.otel_collector.image
+      command   = local.otel_collector.command
+      essential = local.otel_collector.essential
+      cpu       = local.otel_collector.cpu
+      memory    = local.otel_collector.memory
 
-    environment = [
-      {
-        name  = "REDIS_HOST"
-        value = aws_elasticache_cluster.main.cache_nodes[0].address
-      },
-      {
-        name  = "REDIS_PORT"
-        value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
-      }
-    ]
+      logConfiguration = local.otel_collector.logConfiguration
+      healthCheck      = local.otel_collector.healthCheck
 
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.controller.name
-        awslogs-region        = var.region
-        awslogs-stream-prefix = "ecs"
-      }
-    }
-  }])
+      # Environment variables for OTEL collector
+      environment = [
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "AOT_CONFIG_CONTENT"
+          valueFrom = aws_ssm_parameter.adot_config.arn
+        }
+      ]
+    },
+    {
+      name      = "controller"
+      image     = "${data.aws_ecr_repository.controller.repository_url}:${var.controller_image_tag}"
+      essential = true
+
+      environment = [
+        {
+          name  = "REDIS_HOST"
+          value = aws_elasticache_cluster.main.cache_nodes[0].address
+        },
+        {
+          name  = "REDIS_PORT"
+          value = tostring(aws_elasticache_cluster.main.cache_nodes[0].port)
+        }
+      ]
+    },
+  ])
 }
