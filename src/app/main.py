@@ -11,21 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.libs.cache import cache
+from src.libs.messaging.event_stream import event_stream
 from src.config import (
-    ELEVATOR_REQUESTS_STREAM,
     ELEVATOR_STATUS,
     NUM_ELEVATORS,
     NUM_FLOORS,
-    REDIS_DB,
-    REDIS_HOST,
-    REDIS_PASSWORD,
-    REDIS_PORT,
+    ELEVATOR_REQUESTS_STREAM,
 )
-from src.libs.cache import cache
-from src.libs.cache import close as close_cache
-from src.libs.cache import init_cache
-from src.libs.messaging.event_stream import close as close_event_stream
-from src.libs.messaging.event_stream import event_stream, init_event_stream
 
 # Initialize logger with formatter
 logger = logging.getLogger(__name__)
@@ -51,29 +44,6 @@ async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
     # Configure logging
     logger.info("Application starting up")
 
-    # Initialize Cache Service
-    logger.info(
-        "Initializing cache service: host=%s, port=%s, db=%s",
-        REDIS_HOST,
-        REDIS_PORT,
-        REDIS_DB,
-    )
-    init_cache(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        password=REDIS_PASSWORD,
-    )
-
-    # Initialize Event Stream Service
-    logger.info("Initializing event stream service")
-    init_event_stream(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        password=REDIS_PASSWORD,
-    )
-
     # Initialize elevator statuses in cache
     for i in range(1, NUM_ELEVATORS + 1):
         key = ELEVATOR_STATUS.format(i)
@@ -86,14 +56,11 @@ async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
                 "destinations": [],
             }
             await cache.set(key, initial_state)
-
     try:
         yield
     finally:
         # Cleanup
         logger.info("Shutting down application, cleaning up resources")
-        await close_cache()
-        await close_event_stream()
         logger.info("Application shutdown complete")
 
 
