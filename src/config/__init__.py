@@ -1,6 +1,6 @@
 import os
 
-import structlog
+import logging
 from dotenv import load_dotenv
 
 from .channels import (
@@ -11,7 +11,7 @@ from .channels import (
 from .redis import close_redis_client, get_redis_client
 
 # Initialize logger at module level
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
