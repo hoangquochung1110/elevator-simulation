@@ -11,12 +11,9 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 
+
 async def get_redis_client(
-    host: str,
-    port: int,
-    db: int = 0,
-    password: Optional[str] = None,
-    **kwargs
+    host: str, port: int, db: int = 0, password: Optional[str] = None, **kwargs
 ) -> Redis:
     """
     Get a Redis client instance (singleton).
@@ -45,41 +42,51 @@ async def get_redis_client(
     if not isinstance(port, int) or port <= 0 or port > 65535:
         raise ValueError("Redis port must be a valid port number (1-65535)")
     if not isinstance(db, int) or db < 0:
-        raise ValueError("Redis database number must be a non-negative integer")
+        raise ValueError(
+            "Redis database number must be a non-negative integer"
+        )
 
     try:
-        logger.info("Initializing Redis client - host: %s, port: %s, db: %s", host, port, db)
+        logger.info(
+            "Initializing Redis client - host: %s, port: %s, db: %s",
+            host,
+            port,
+            db,
+        )
         _redis_client = Redis(
             host=host,
             port=port,
             db=db,
             password=password,
             decode_responses=True,
-            **kwargs
+            **kwargs,
         )
-        
+
         await _redis_client.ping()
         logger.info("Redis client initialized successfully")
         return _redis_client
     except RedisConnectionError as e:
         logger.error(
             "Failed to connect to Redis: %s, host=%s, port=%s",
-            str(e), host, port,
-            exc_info=True
+            str(e),
+            host,
+            port,
+            exc_info=True,
         )
         raise
     except Exception as e:
         logger.error(
             "An unexpected error occurred during Redis initialization: %s",
             str(e),
-            exc_info=True
+            exc_info=True,
         )
         raise
+
 
 async def close_redis_client() -> None:
     """
     Close the shared Redis client connection.
-    
+
     This will close the connection and set the client to None, allowing a new
     connection to be established on the next get_redis_client() call.
     """
@@ -92,7 +99,7 @@ async def close_redis_client() -> None:
             logger.error(
                 "Error while closing Redis connection: %s",
                 str(e),
-                exc_info=True
+                exc_info=True,
             )
         finally:
             _redis_client = None

@@ -3,8 +3,12 @@ import json
 import logging
 from typing import Dict, Optional
 
-from src.config import (ELEVATOR_COMMANDS, ELEVATOR_REQUESTS_STREAM,
-                      ELEVATOR_STATUS, NUM_ELEVATORS)
+from src.config import (
+    ELEVATOR_COMMANDS,
+    ELEVATOR_REQUESTS_STREAM,
+    ELEVATOR_STATUS,
+    NUM_ELEVATORS,
+)
 from src.libs.cache import cache
 from src.libs.messaging.event_stream import event_stream
 from src.libs.messaging.pubsub import pubsub
@@ -39,7 +43,6 @@ class Scheduler:
         await event_stream.create_consumer_group(
             ELEVATOR_REQUESTS_STREAM, SCHEDULER_GROUP
         )
-
 
         # Load initial elevator states
         await self._load_elevator_states()
@@ -82,7 +85,8 @@ class Scheduler:
         request_type = data.get("request_type")
         logger.info(
             "received_request: request_type=%s, message_id=%s",
-            request_type, message_id
+            request_type,
+            message_id,
         )
 
         if request_type == "external":
@@ -106,12 +110,16 @@ class Scheduler:
             )
             logger.info(
                 "assigned_external_request: floor=%s, elevator_id=%s, request_id=%s",
-                request.floor, elevator_id, request.id
+                request.floor,
+                elevator_id,
+                request.id,
             )
         else:
             logger.warning(
                 "no_suitable_elevator: floor=%s, request_id=%s, direction=%s",
-                request.floor, request.id, request.direction.name
+                request.floor,
+                request.id,
+                request.direction.name,
             )
 
     async def _handle_internal_request(self, request: InternalRequest):
@@ -126,7 +134,9 @@ class Scheduler:
         )
         logger.info(
             "assigned_internal_request: elevator_id=%s, floor=%s, request_id=%s",
-            request.elevator_id, request.destination_floor, request.id
+            request.elevator_id,
+            request.destination_floor,
+            request.id,
         )
 
     async def _load_elevator_states(self) -> None:
@@ -134,7 +144,9 @@ class Scheduler:
             key = ELEVATOR_STATUS.format(elevator_id)
             state = await cache.get(key)
             if state is None:
-                logger.warning("Elevator %s state not found in cache.", elevator_id)
+                logger.warning(
+                    "Elevator %s state not found in cache.", elevator_id
+                )
                 # Initialize with a default state if not found
                 state = {
                     "id": elevator_id,
@@ -153,13 +165,19 @@ class Scheduler:
         best_score = float("inf")
         logger.info(
             "serving_request: request_id=%s, floor=%s, direction=%s",
-            request.id, request.floor, request.direction.name
+            request.id,
+            request.floor,
+            request.direction.name,
         )
         for elevator_id, state in self.elevator_states.items():
-            score = self._calculate_score(state, request.floor, request.direction)
+            score = self._calculate_score(
+                state, request.floor, request.direction
+            )
             logger.info(
                 "elevator_score: request_id=%s, elevator_id=%s, score=%s",
-                request.id, elevator_id, score
+                request.id,
+                elevator_id,
+                score,
             )
             if score < best_score:
                 best_score = score
@@ -167,7 +185,10 @@ class Scheduler:
         return best_elevator_id
 
     def _calculate_score(
-        self, elevator_state: Elevator, request_floor: int, request_direction: Direction
+        self,
+        elevator_state: Elevator,
+        request_floor: int,
+        request_direction: Direction,
     ) -> float:
         current_floor = elevator_state.current_floor
         status = elevator_state.status
@@ -177,8 +198,15 @@ class Scheduler:
         if status == ElevatorStatus.IDLE:
             score -= 1
         elif status in (ElevatorStatus.MOVING_UP, ElevatorStatus.MOVING_DOWN):
-            is_on_way = (status == ElevatorStatus.MOVING_UP and request_direction == Direction.UP and request_floor >= current_floor) or \
-                        (status == ElevatorStatus.MOVING_DOWN and request_direction == Direction.DOWN and request_floor <= current_floor)
+            is_on_way = (
+                status == ElevatorStatus.MOVING_UP
+                and request_direction == Direction.UP
+                and request_floor >= current_floor
+            ) or (
+                status == ElevatorStatus.MOVING_DOWN
+                and request_direction == Direction.DOWN
+                and request_floor <= current_floor
+            )
             score *= 0.8 if is_on_way else 5.0
 
         return score

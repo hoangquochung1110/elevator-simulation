@@ -19,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
+
 async def shutdown(sig, loop):
     """Cleanup tasks tied to the service's shutdown."""
     logger.info("Received exit signal %s...", sig.name)
@@ -72,7 +73,6 @@ async def main():
 
 
 if __name__ == "__main__":
-
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

@@ -148,7 +148,9 @@ class Elevator:
         Returns:
             New Elevator instance
         """
-        elevator = cls(elevator_id=data["id"], initial_floor=data["current_floor"])
+        elevator = cls(
+            elevator_id=data["id"], initial_floor=data["current_floor"]
+        )
         elevator.status = ElevatorStatus(data["status"])
         elevator.door_status = DoorStatus(data["door_status"])
         elevator.destinations = data.get("destinations", [])

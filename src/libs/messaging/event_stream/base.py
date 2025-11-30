@@ -1,6 +1,7 @@
 """
 Abstract base class for event stream clients.
 """
+
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -63,7 +64,9 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def acknowledge(self, stream: str, group: str, *message_ids: str) -> int:
+    async def acknowledge(
+        self, stream: str, group: str, *message_ids: str
+    ) -> int:
         """Acknowledge messages in a stream.
 
         Args:
@@ -172,7 +175,9 @@ class EventStreamClient(ABC):
         pass
 
     @abstractmethod
-    async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
+    async def range(
+        self, stream: str, start: str = "-", end: str = "+"
+    ) -> List[Any]:
         """Retrieve entries from a stream within a given range.
 
         Args:

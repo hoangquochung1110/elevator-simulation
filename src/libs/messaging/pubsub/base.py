@@ -1,4 +1,5 @@
 """Abstract base class for pub/sub clients."""
+
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, Optional, Union
 
@@ -10,7 +11,9 @@ class PubSubClient(ABC):
     """
 
     @abstractmethod
-    async def publish(self, channel: str, message: Union[str, Dict[str, Any]]) -> None:
+    async def publish(
+        self, channel: str, message: Union[str, Dict[str, Any]]
+    ) -> None:
         """Publish a message to a channel.
 
         Args:
@@ -46,7 +49,9 @@ class PubSubClient(ABC):
         pass
 
     @abstractmethod
-    async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
+    async def get_message(
+        self, timeout: float = 1.0
+    ) -> Optional[Dict[str, Any]]:
         """Get the next message from the subscribed channels.
 
         Args:

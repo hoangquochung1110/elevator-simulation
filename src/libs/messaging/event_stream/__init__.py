@@ -12,23 +12,25 @@ Basic usage:
 """
 
 from .exceptions import EventStreamConnectionError, EventStreamError
-from .service import (EventStreamService, close, get_event_stream,
-                      init_event_stream)
+from .service import (
+    EventStreamService,
+    close,
+    get_event_stream,
+    init_event_stream,
+)
 
 # The global event_stream instance
 event_stream: EventStreamService = get_event_stream()
 
 __all__ = [
     # Main instance
-    'event_stream',
-
+    "event_stream",
     # Service and initialization
-    'EventStreamService',
-    'get_event_stream',
-    'init_event_stream',
-    'close',
-
+    "EventStreamService",
+    "get_event_stream",
+    "init_event_stream",
+    "close",
     # Exceptions
-    'EventStreamError',
-    'EventStreamConnectionError',
+    "EventStreamError",
+    "EventStreamConnectionError",
 ]

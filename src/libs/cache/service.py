@@ -4,6 +4,7 @@ Cache service implementation.
 This module provides a high-level interface for caching operations,
 with Redis as the default backend.
 """
+
 import functools
 import logging
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
@@ -13,7 +14,8 @@ from .backends.redis import RedisBackend
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class CacheService:
     """High-level cache service with a simple interface.
@@ -35,7 +37,7 @@ class CacheService:
     def __init__(
         self,
         backend: Optional[Union[str, BaseCacheBackend]] = None,
-        **backend_options
+        **backend_options,
     ) -> None:
         """Initialize the cache service.
 
@@ -47,7 +49,7 @@ class CacheService:
         if self._initialized:
             return
 
-        if backend is None or backend == 'redis':
+        if backend is None or backend == "redis":
             self._backend = RedisBackend(**backend_options)
         elif isinstance(backend, str):
             raise ValueError(f"Unsupported cache backend: {backend}")
@@ -99,7 +101,9 @@ class CacheService:
         assert backend is not None
         return await backend.get_many(keys)
 
-    async def set_many(self, data: Dict[str, Any], timeout: Optional[int] = None) -> None:
+    async def set_many(
+        self, data: Dict[str, Any], timeout: Optional[int] = None
+    ) -> None:
         """Set multiple keys in the cache."""
         backend = self._backend
         assert backend is not None
@@ -183,6 +187,7 @@ class CacheService:
                 # Expensive operation
                 return data
         """
+
         def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -197,7 +202,9 @@ class CacheService:
                     cache_key = key
                 else:
                     # Default key is function name + args + kwargs
-                    cache_key = f"{func.__module__}:{func.__name__}:{args}:{kwargs}"
+                    cache_key = (
+                        f"{func.__module__}:{func.__name__}:{args}:{kwargs}"
+                    )
 
                 # Try to get from cache
                 try:
@@ -218,6 +225,7 @@ class CacheService:
                 return result
 
             return wrapper
+
         return decorator
 
 

@@ -3,6 +3,7 @@ Base cache backend interface.
 
 This module defines the abstract base class that all cache backends must implement.
 """
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -86,7 +87,9 @@ class BaseCacheBackend(ABC):
         """
         return {key: await self.get(key) for key in keys}
 
-    async def set_many(self, data: Dict[str, Any], timeout: Optional[int] = None) -> None:
+    async def set_many(
+        self, data: Dict[str, Any], timeout: Optional[int] = None
+    ) -> None:
         """Set a bunch of values in the cache at once.
 
         Args:
@@ -105,7 +108,9 @@ class BaseCacheBackend(ABC):
         for key in keys:
             await self.delete(key)
 
-    async def get_or_set(self, key: str, default: Any, timeout: Optional[int] = None) -> Any:
+    async def get_or_set(
+        self, key: str, default: Any, timeout: Optional[int] = None
+    ) -> Any:
         """Fetch a key from the cache, or set it with a default if not present.
 
         Args:

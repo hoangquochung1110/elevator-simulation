@@ -6,6 +6,7 @@ import os
 import asyncio
 import importlib
 from typing import Any, Dict, Optional, Union, AsyncIterator
+
 # Use relative imports within the package to satisfy type checker/package resolution
 from ..base import PubSubClient
 from ..exceptions import PubSubConnectionError, PubSubPublishError
@@ -49,7 +50,9 @@ class RedisPubSubBackend(PubSubClient):
         """Get the Redis client, initializing it if necessary."""
         if self._client is None:
             if _redis_asyncio is None:
-                raise PubSubConnectionError("redis.asyncio module is not available")
+                raise PubSubConnectionError(
+                    "redis.asyncio module is not available"
+                )
             self._client = _redis_asyncio.Redis(**self._client_params)
         return self._client
 
@@ -57,7 +60,9 @@ class RedisPubSubBackend(PubSubClient):
         """Ensure the Redis client is connected."""
         if self._client is None:
             if _redis_asyncio is None:
-                raise PubSubConnectionError("redis.asyncio module is not available")
+                raise PubSubConnectionError(
+                    "redis.asyncio module is not available"
+                )
             self._client = _redis_asyncio.Redis(**self._client_params)
         assert self._client is not None
         if self._pubsub is None:
@@ -68,15 +73,23 @@ class RedisPubSubBackend(PubSubClient):
             logger.error("Redis connection error: %s", e)
             raise PubSubConnectionError(f"Redis connection error: {e}") from e
 
-    async def publish(self, channel: str, message: Union[str, Dict[str, Any]]) -> None:
+    async def publish(
+        self, channel: str, message: Union[str, Dict[str, Any]]
+    ) -> None:
         """Publish a message to a channel."""
         try:
             await self._ensure_connected()
-            msg = json.dumps(message) if isinstance(message, dict) else str(message)
+            msg = (
+                json.dumps(message)
+                if isinstance(message, dict)
+                else str(message)
+            )
             await self.client.publish(channel, msg)
             logger.debug("Published message to channel %s: %s", channel, msg)
         except Exception as e:
-            logger.error("Failed to publish message to channel %s: %s", channel, str(e))
+            logger.error(
+                "Failed to publish message to channel %s: %s", channel, str(e)
+            )
             raise PubSubPublishError(f"Failed to publish message: {e}") from e
 
     async def subscribe(self, channel: str) -> AsyncIterator[Dict[str, Any]]:
@@ -102,7 +115,9 @@ class RedisPubSubBackend(PubSubClient):
 
         return _message_iterator()
 
-    def _decode_message(self, message_data: Union[str, bytes]) -> Dict[str, Any]:
+    def _decode_message(
+        self, message_data: Union[str, bytes]
+    ) -> Dict[str, Any]:
         """Decode message data, attempting JSON deserialization."""
         try:
             decoded_message = (
@@ -124,7 +139,9 @@ class RedisPubSubBackend(PubSubClient):
             self._subscriptions.discard(channel)
             logger.debug("Unsubscribed from channel %s", channel)
 
-    async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
+    async def get_message(
+        self, timeout: float = 1.0
+    ) -> Optional[Dict[str, Any]]:
         """Get the next message from subscribed channels.
 
         Args:
@@ -138,8 +155,8 @@ class RedisPubSubBackend(PubSubClient):
             return None
 
         message = await self._pubsub.get_message(timeout=timeout)
-        if message and message['type'] == 'message':
-            return self._decode_message(message['data'])
+        if message and message["type"] == "message":
+            return self._decode_message(message["data"])
         return None
 
     async def close(self) -> None:

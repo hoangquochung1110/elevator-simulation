@@ -27,7 +27,9 @@ class PubSubService:
         else:
             raise ValueError(f"Unsupported pub/sub backend: {backend}")
 
-    async def publish(self, channel: str, message: Union[str, Dict[str, Any]]) -> None:
+    async def publish(
+        self, channel: str, message: Union[str, Dict[str, Any]]
+    ) -> None:
         return await self._backend.publish(channel, message)
 
     async def subscribe(self, channel: str) -> AsyncIterator[Dict[str, Any]]:
@@ -38,7 +40,9 @@ class PubSubService:
         """Unsubscribe from a channel."""
         await self._backend.unsubscribe(channel)
 
-    async def get_message(self, timeout: float = 1.0) -> Optional[Dict[str, Any]]:
+    async def get_message(
+        self, timeout: float = 1.0
+    ) -> Optional[Dict[str, Any]]:
         """Get the next message from the subscribed channels.
 
         Args:

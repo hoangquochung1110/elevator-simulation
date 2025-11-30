@@ -1,6 +1,7 @@
 """
 Redis Streams implementation of the Event Stream client interface.
 """
+
 import os
 import json
 import logging
@@ -53,24 +54,50 @@ class RedisStreamClient(EventStreamClient):
                         payload[k] = json.dumps(v)
                     except TypeError:
                         payload[k] = str(v)
-            message_id = await self.redis.xadd(stream, cast(Dict[Any, Any], payload))
-            logger.debug("Event published to stream '%s' with message ID: %s", stream, message_id)
+            message_id = await self.redis.xadd(
+                stream, cast(Dict[Any, Any], payload)
+            )
+            logger.debug(
+                "Event published to stream '%s' with message ID: %s",
+                stream,
+                message_id,
+            )
             return message_id
         except Exception as e:
-            logger.error("Failed to publish to stream '%s': %s", stream, str(e))
+            logger.error(
+                "Failed to publish to stream '%s': %s", stream, str(e)
+            )
             raise
 
-    async def create_consumer_group(self, stream: str, group: str, start_id: str = "$") -> bool:
+    async def create_consumer_group(
+        self, stream: str, group: str, start_id: str = "$"
+    ) -> bool:
         """Create a consumer group for a stream."""
         try:
-            await self.redis.xgroup_create(stream, group, start_id, mkstream=True)
-            logger.debug("Created consumer group '%s' for stream '%s' starting at ID '%s'", group, stream, start_id)
+            await self.redis.xgroup_create(
+                stream, group, start_id, mkstream=True
+            )
+            logger.debug(
+                "Created consumer group '%s' for stream '%s' starting at ID '%s'",
+                group,
+                stream,
+                start_id,
+            )
             return True
         except Exception as e:
             if "BUSYGROUP" in str(e):
-                logger.warning("Consumer group '%s' already exists for stream '%s'", group, stream)
+                logger.warning(
+                    "Consumer group '%s' already exists for stream '%s'",
+                    group,
+                    stream,
+                )
                 return True  # Group already exists
-            logger.error("Failed to create consumer group '%s' for stream '%s': %s", group, stream, str(e))
+            logger.error(
+                "Failed to create consumer group '%s' for stream '%s': %s",
+                group,
+                stream,
+                str(e),
+            )
             return False
 
     async def read_group(
@@ -94,11 +121,16 @@ class RedisStreamClient(EventStreamClient):
         except Exception as e:
             logger.error(
                 "Failed to read from group '%s' on stream '%s' for consumer '%s': %s",
-                group, stream, consumer, str(e)
+                group,
+                stream,
+                consumer,
+                str(e),
             )
             raise
 
-    async def acknowledge(self, stream: str, group: str, *message_ids: str) -> int:
+    async def acknowledge(
+        self, stream: str, group: str, *message_ids: str
+    ) -> int:
         """Acknowledge messages in a Redis Stream."""
         if not message_ids:
             return 0
@@ -107,16 +139,23 @@ class RedisStreamClient(EventStreamClient):
         except Exception as e:
             logger.error(
                 "Failed to acknowledge messages %s in group '%s' on stream '%s': %s",
-                message_ids, group, stream, str(e)
+                message_ids,
+                group,
+                stream,
+                str(e),
             )
             raise
 
-    async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
+    async def range(
+        self, stream: str, start: str = "-", end: str = "+"
+    ) -> List[Any]:
         """Retrieve entries from a stream within a given range."""
         try:
             return await self.redis.xrange(stream, start, end)
         except Exception as e:
-            logger.error("Failed to retrieve range from stream '%s': %s", stream, str(e))
+            logger.error(
+                "Failed to retrieve range from stream '%s': %s", stream, str(e)
+            )
             raise
 
     async def trim(

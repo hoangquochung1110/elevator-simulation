@@ -52,7 +52,11 @@ class BaseRequest:
         Returns:
             Dictionary representation
         """
-        return {"id": self.id, "timestamp": self.timestamp, "status": self.status.value}
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp,
+            "status": self.status.value,
+        }
 
     def to_json(self) -> str:
         """
@@ -87,7 +91,11 @@ class ExternalRequest(BaseRequest):
         """
         data = super().to_dict()
         data.update(
-            {"type": "external", "floor": self.floor, "direction": self.direction.value}
+            {
+                "type": "external",
+                "floor": self.floor,
+                "direction": self.direction.value,
+            }
         )
         return data
 
@@ -102,7 +110,9 @@ class ExternalRequest(BaseRequest):
         Returns:
             New ExternalRequest instance
         """
-        request = cls(floor=data["floor"], direction=Direction(data["direction"]))
+        request = cls(
+            floor=data["floor"], direction=Direction(data["direction"])
+        )
         request.id = data["id"]
         request.timestamp = data["timestamp"]
         request.status = RequestStatus(data["status"])
@@ -166,7 +176,8 @@ class InternalRequest(BaseRequest):
             New InternalRequest instance
         """
         request = cls(
-            elevator_id=data["elevator_id"], destination_floor=data["destination_floor"]
+            elevator_id=data["elevator_id"],
+            destination_floor=data["destination_floor"],
         )
         request.id = data["id"]
         request.timestamp = data["timestamp"]

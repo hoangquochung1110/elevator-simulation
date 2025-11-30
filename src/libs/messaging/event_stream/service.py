@@ -4,6 +4,7 @@ Event Stream service implementation.
 This module provides a high-level interface for event streaming operations,
 with Redis as the default backend.
 """
+
 import logging
 from typing import Any, List, Optional, Union
 
@@ -27,7 +28,9 @@ class EventStreamService:
         return cls._instance
 
     def __init__(
-        self, backend: Optional[Union[str, EventStreamClient]] = None, **backend_options
+        self,
+        backend: Optional[Union[str, EventStreamClient]] = None,
+        **backend_options,
     ) -> None:
         """Initialize the event stream service."""
         if self._initialized:
@@ -63,7 +66,9 @@ class EventStreamService:
         assert backend is not None
         return await backend.acknowledge(stream, group, *message_ids)
 
-    async def range(self, stream: str, start: str = "-", end: str = "+") -> List[Any]:
+    async def range(
+        self, stream: str, start: str = "-", end: str = "+"
+    ) -> List[Any]:
         backend = self._backend
         assert backend is not None
         return await backend.range(stream, start, end)

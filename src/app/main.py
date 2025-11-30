@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 # Set up basic logging configuration if not already configured
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -43,12 +45,19 @@ load_dotenv()  # take environment variables
 
 # --- Startup and shutdown events ---
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
+    """Implement startup logic before the application starts receiving requests"""
+
     # Configure logging
     logger.info("Application starting up")
 
     # Initialize Cache Service
-    logger.info("Initializing cache service: host=%s, port=%s, db=%s", REDIS_HOST, REDIS_PORT, REDIS_DB)
+    logger.info(
+        "Initializing cache service: host=%s, port=%s, db=%s",
+        REDIS_HOST,
+        REDIS_PORT,
+        REDIS_DB,
+    )
     init_cache(
         host=REDIS_HOST,
         port=REDIS_PORT,
@@ -115,10 +124,14 @@ class InternalRequestModel(BaseModel):
     elevator_id: int = Field(
         ..., ge=1, le=NUM_ELEVATORS, description="ID of the elevator"
     )
-    destination_floor: int = Field(..., ge=1, le=NUM_FLOORS, description="Target floor")
+    destination_floor: int = Field(
+        ..., ge=1, le=NUM_FLOORS, description="Target floor"
+    )
 
     model_config = ConfigDict(
-        json_schema_extra={"example": {"elevator_id": 1, "destination_floor": 5}}
+        json_schema_extra={
+            "example": {"elevator_id": 1, "destination_floor": 5}
+        }
     )
 
 
@@ -138,7 +151,11 @@ async def fetch_elevator_statuses() -> list[dict]:
 @app.post("/api/requests/internal", status_code=202)
 async def create_internal_request(req: InternalRequestModel):
     request_id = str(uuid.uuid4())
-    logger.info("Received internal request: elevator_id=%s, destination_floor=%s", req.elevator_id, req.destination_floor)
+    logger.info(
+        "Received internal request: elevator_id=%s, destination_floor=%s",
+        req.elevator_id,
+        req.destination_floor,
+    )
     request_data = req.model_dump()
     request_data.update(
         {
@@ -188,10 +205,15 @@ async def get_stream_requests():
 @app.delete("/api/requests", status_code=200)
 async def trim_stream(
     min_id: Optional[str] = Query(
-        None, description="Exclusive start ID; entries with ID < min_id will be removed"
+        None,
+        description="Exclusive start ID; entries with ID < min_id will be removed",
     ),
-    maxlen: Optional[int] = Query(None, description="Maximum number of entries to keep"),
-    approximate: bool = Query(True, description="Whether to use approximate trimming"),
+    maxlen: Optional[int] = Query(
+        None, description="Maximum number of entries to keep"
+    ),
+    approximate: bool = Query(
+        True, description="Whether to use approximate trimming"
+    ),
 ):
     """
     Trim the elevator requests stream using XTRIM.
@@ -215,6 +237,7 @@ async def elevator_table(request: Request):
         {"request": request, "elevators": elevators, "num_floors": NUM_FLOORS},
     )
 
+
 @app.get("/request-table")
 async def request_table(request: Request):
     """Render the request table view."""
@@ -223,6 +246,7 @@ async def request_table(request: Request):
         "request_table.html",
         {"request": request, "requests": response["requests"]},
     )
+
 
 @app.get("/")
 async def index(request: Request):

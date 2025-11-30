@@ -4,6 +4,7 @@ Cache service configuration.
 This module provides configuration settings for the cache service,
 with support for environment variable overrides.
 """
+
 import os
 
 # Get Redis host and port from environment variables
