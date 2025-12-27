@@ -11,6 +11,8 @@ x-otel-env: &otel-base
   # If you truly want logs only (keep these, optional):
   OTEL_TRACES_EXPORTER: none
   OTEL_METRICS_EXPORTER: none
+  # Custom Resource Attributes
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=local
 
 services:
   redis:
