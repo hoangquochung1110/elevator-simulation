@@ -7,9 +7,19 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+
 # Processors
 processors:
   batch:
+    # This is the number of items (spans, logs, etc.) 
+    # that will trigger a batch to be sent.
+    send_batch_size: 10000
+    # This is a time-based trigger. 
+    # If a batch hasn't reached its send_batch_size
+    # but a certain amount of time has passed (e.g., 200 milliseconds),
+    # the batch will be sent anyway.
+    timeout: 1s
+
 
 # Exporters
 exporters:
@@ -17,8 +27,10 @@ exporters:
     endpoint: "http://loki:3100/otlp"
     tls:
       insecure: true
+
   debug:
     verbosity: detailed
+
 
 # Pipelines
 service:
