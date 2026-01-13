@@ -133,17 +133,22 @@ async def create_internal_request(req: InternalRequestModel):
         }
     )
     await event_stream.publish(ELEVATOR_REQUESTS_STREAM, request_data)
-    logger.info("Published internal request: id=%s", request_id)
     return {"status": "queued", "channel": ELEVATOR_REQUESTS_STREAM}
 
 
 @app.post("/api/requests/external", status_code=202)
 async def create_external_request(req: ExternalRequestModel):
+    request_id = str(uuid.uuid4())
+    logger.info(
+        "Received external request: floor=%s, direction=%s",
+        req.floor,
+        req.direction,
+    )
     request_data = req.model_dump()
     request_data.update(
         {
             "timestamp": datetime.now().isoformat(),
-            "id": str(uuid.uuid4()),
+            "id": request_id,
             "request_type": "external",
             "status": "pending",
         }
