@@ -5,9 +5,6 @@ WORKDIR /app
 # Install uv
 RUN pip install --no-cache-dir uv
 
-# Init venv
-RUN uv venv
-
 # Copy only dependency files first
 COPY pyproject.toml .
 COPY uv.lock .
