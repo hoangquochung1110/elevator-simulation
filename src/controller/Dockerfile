@@ -10,7 +10,10 @@ COPY pyproject.toml .
 COPY uv.lock .
 
 # Install dependencies in a separate layer
-RUN uv pip install --system -e .
+RUN uv sync --frozen --group dev
+
+# Add the venv to the PATH
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy the application source code
 COPY ./src /app/src
