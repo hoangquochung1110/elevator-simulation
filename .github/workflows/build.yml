@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - develop
     # Only trigger when these paths change
     paths:
       - 'src/**'
@@ -31,16 +32,18 @@ jobs:
     name: Build and Push Images to AWS ECR
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      id-token: write   # required for OIDC token request
+      contents: read
 
     steps:
     - name: Checkout
       uses: actions/checkout@v3
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: arn:aws:iam::838835070561:role/github_actions_redis_pubpub_101
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
