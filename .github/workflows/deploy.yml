@@ -1,4 +1,4 @@
-name: Manual Deploy to ECS
+name: Manual Deploy to Develop ECS
 
 on:
   workflow_dispatch:
@@ -11,19 +11,17 @@ env:
 
 jobs:
   deploy:
-    name: Deploy to ECS
+    name: Deploy to Develop ECS
     runs-on: ubuntu-latest
-    environment: production
+    environment: develop
 
     steps:
     - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Download Image Tag Artifact
+    - name: Download Image Tag from Build Workflow
       uses: dawidd6/action-download-artifact@v4
       with:
-        # Specifies the workflow file
-        # that generated the artifact (in this case, your build workflow).
         workflow: build.yml
         name: image-tag
         path: .
