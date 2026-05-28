@@ -1,6 +1,4 @@
-import asyncio
 import json
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -47,6 +45,3 @@ async def test_controller_initialization(mock_controller_pubsub):
     assert controller.elevator.door_status == DoorStatus.CLOSED
     assert controller.command_channel == "elevator:commands:1"
     assert controller.status_channel == "elevator:status:1"
-
-
-
