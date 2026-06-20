@@ -12,6 +12,10 @@ COPY uv.lock .
 # Install dependencies in a separate layer
 RUN uv sync --frozen --group dev
 
+# Auto-discover and install all required instrumentations
+# This automatically finds and installs packages needed for logging, etc.
+RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
+
 # Add the venv to the PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
